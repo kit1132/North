@@ -1,6 +1,6 @@
 # North
 
-This repository contains a simple Excel VBA macro.
+This repository contains simple Excel VBA macros.
 
 ## Macro: AddRowsAndGoHome
 
@@ -19,3 +19,11 @@ End Sub
 ```
 
 Use this code in your Excel workbook to quickly add two rows to all sheets and return to the leftmost sheet.
+
+## Macro: UpdateSheetList
+
+`VBA/UpdateSheetList.bas` creates or refreshes a sheet named "シート一覧" at the leftmost position. Each worksheet name listed in column A includes a hyperlink that jumps to the corresponding sheet.
+
+## Workbook Event
+
+`VBA/ThisWorkbook.cls` contains a `Workbook_NewSheet` event that calls `UpdateSheetList` whenever a new worksheet is added, ensuring the list stays up to date automatically.
