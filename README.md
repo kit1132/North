@@ -27,3 +27,7 @@ Use this code in your Excel workbook to quickly add two rows to all sheets and r
 ## Workbook Event
 
 `VBA/ThisWorkbook.cls` contains a `Workbook_NewSheet` event that calls `UpdateSheetList` whenever a new worksheet is added, ensuring the list stays up to date automatically.
+
+## Macro: GenerateSheetRelations
+
+`VBA/GenerateSheetRelations.bas` scans the workbook for formulas, defined names, pivot tables, queries and data model relationships that reference other sheets. The results are written to a new sheet named **SheetRelations** with the columns `SourceSheet`, `TargetSheet`, `RelationType` and `Details`. Set the constant `DIAGRAM` to `True` to additionally draw a simple relation map on **SheetRelationMap**.
