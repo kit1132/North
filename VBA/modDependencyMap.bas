@@ -29,8 +29,15 @@ Public Sub GenerateDependencyMap()
     Set gEdges = CreateObject("Scripting.Dictionary")
     
     '―― 選択シートのみを解析
+    Dim targetSheets As Sheets
+    If ThisWorkbook.Windows.Count > 0 Then
+        Set targetSheets = ThisWorkbook.Windows(1).SelectedSheets
+    Else
+        Set targetSheets = ThisWorkbook.Worksheets
+    End If
+
     Application.StatusBar = "解析中…"
-    AnalyzeSheets ActiveWindow.SelectedSheets
+    AnalyzeSheets targetSheets
     Application.StatusBar = "結果を出力中…"
     
     '―― 出力
