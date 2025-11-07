@@ -1,0 +1,81 @@
+# =========================================
+# 解決策2：条件分岐で「はい」の時だけ完了通知
+# =========================================
+
+kind: AdaptiveTopic
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+
+  actions:
+    # ===== ステップ1：入力内容の確認 =====
+    - kind: AdaptiveCardPrompt
+      id: QCt2gf
+      variable: Topic.Confirm
+
+      card:
+        type: AdaptiveCard
+        version: "1.5"
+        $schema: "http://adaptivecards.io/schemas/adaptive-card.json"
+
+        body:
+          - type: TextBlock
+            size: Medium
+            weight: Bolder
+            text: "ご入力内容の確認"
+
+          - type: FactSet
+            facts:
+              - title: "相談区分"
+                value: "${Topic.InquiryType}"
+              - title: "部名"
+                value: "${Topic.Department}"
+              - title: "担当者名"
+                value: "${Topic.PersonInCharge}"
+              - title: "相談の概要"
+                value: "${Topic.ConsultationSummary}"
+              - title: "円貨/外貨"
+                value: "${Topic.CurrencyType}"
+              - title: "受取口座"
+                value: "${Topic.ReceivingAccount}"
+              - title: "処理予定日"
+                value: "${if(empty(Topic.ScheduledDate), '', formatDateTime(Topic.ScheduledDate, 'yyyy-MM-dd'))}"
+
+          - type: Input.ChoiceSet
+            id: Confirm
+            label: "最終確認"
+            style: expanded
+            isRequired: true
+            errorMessage: "はい/いいえを選んでください。"
+            choices:
+              - title: "はい"
+                value: "yes"
+              - title: "いいえ（修正）"
+                value: "no"
+
+        actions:
+          - type: Action.Submit
+            title: "決定"
+
+    # ===== ステップ2：条件分岐（「はい」の場合のみ） ← 追加 =====
+    - kind: ConditionGroup
+      id: check_confirmation
+      conditions:
+        # 「はい」が選択された場合のみ実行
+        - id: if_yes
+          condition: =Topic.Confirm = "yes"
+          actions:
+            - kind: SendActivity
+              id: send_completion
+              activity:
+                text: "入力内容で承認しました。処理を開始します。"
+
+        # 「いいえ」が選択された場合
+        - id: if_no
+          condition: =Topic.Confirm = "no"
+          actions:
+            - kind: SendActivity
+              id: send_correction
+              activity:
+                text: "修正モードに戻ります。内容を再入力してください。"
+            # ここで元のフォーム入力に戻る処理を追加可能
