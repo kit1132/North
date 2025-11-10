@@ -16,14 +16,16 @@ Public Sub UpdateSheetList()
     ' 一覧シートを追加して一番左に配置
     Set listSheet = Worksheets.Add(Before:=Worksheets(1))
     listSheet.Name = "シート一覧"
-    listSheet.Cells(1, 1).Value = "シート名"
+    listSheet.Cells(1, 1).Value = "Id"
+    listSheet.Cells(1, 2).Value = "シート名"
 
     ' 各シート名をハイパーリンク付きで記入
     i = 2
     For Each ws In ThisWorkbook.Worksheets
         If ws.Name <> "シート一覧" Then
+            listSheet.Cells(i, 1).Value = i - 1  ' Id列に連番を追加
             listSheet.Hyperlinks.Add _
-                Anchor:=listSheet.Cells(i, 1), _
+                Anchor:=listSheet.Cells(i, 2), _
                 Address:="", _
                 SubAddress:="'" & ws.Name & "'!A1", _
                 TextToDisplay:=ws.Name
@@ -32,7 +34,7 @@ Public Sub UpdateSheetList()
     Next ws
 
     ' 仕上げ
-    listSheet.Columns("A:A").AutoFit
+    listSheet.Columns("A:B").AutoFit
     Application.Calculation = xlCalculationAutomatic
     Application.EnableEvents = True
     Application.ScreenUpdating = True
