@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebXR オセロ - Othello VR</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #fff;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #game-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* メニューUI */
+    #menu-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+    }
+
+    #menu-overlay.hidden {
+      display: none;
+    }
+
+    .menu-title {
+      font-size: 3rem;
+      margin-bottom: 0.5rem;
+      text-shadow: 0 0 20px rgba(100, 200, 255, 0.8);
+    }
+
+    .menu-subtitle {
+      font-size: 1rem;
+      margin-bottom: 2rem;
+      color: #aaa;
+    }
+
+    .menu-button {
+      padding: 15px 40px;
+      margin: 10px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 250px;
+    }
+
+    .menu-button.primary {
+      background: linear-gradient(135deg, #00c853 0%, #00e676 100%);
+      color: #000;
+    }
+
+    .menu-button.secondary {
+      background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%);
+      color: #fff;
+    }
+
+    .menu-button.vr {
+      background: linear-gradient(135deg, #9c27b0 0%, #ba68c8 100%);
+      color: #fff;
+    }
+
+    .menu-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .menu-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ゲームUI */
+    #game-ui {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    #game-ui.hidden {
+      display: none;
+    }
+
+    .score-panel {
+      background: rgba(0, 0, 0, 0.6);
+      padding: 15px 25px;
+      border-radius: 10px;
+      pointer-events: auto;
+    }
+
+    .score-panel h3 {
+      font-size: 0.9rem;
+      color: #aaa;
+      margin-bottom: 5px;
+    }
+
+    .score-value {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+
+    .score-panel.black .score-value {
+      color: #333;
+      text-shadow: 0 0 10px #fff;
+    }
+
+    .score-panel.white .score-value {
+      color: #fff;
+      text-shadow: 0 0 10px #000;
+    }
+
+    .current-turn {
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    #turn-indicator {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 30px;
+      border-radius: 25px;
+      font-size: 1.2rem;
+    }
+
+    #game-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    .control-button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      transition: all 0.2s ease;
+    }
+
+    .control-button:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* 結果画面 */
+    #result-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 150;
+    }
+
+    #result-overlay.hidden {
+      display: none;
+    }
+
+    .result-title {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .result-score {
+      font-size: 1.5rem;
+      margin-bottom: 2rem;
+      color: #aaa;
+    }
+
+    /* 難易度選択 */
+    .difficulty-select {
+      margin: 20px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .difficulty-select label {
+      margin-bottom: 10px;
+      font-size: 1rem;
+      color: #aaa;
+    }
+
+    .difficulty-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .difficulty-btn {
+      padding: 10px 20px;
+      border: 2px solid #fff;
+      background: transparent;
+      color: #fff;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .difficulty-btn:hover,
+    .difficulty-btn.selected {
+      background: #fff;
+      color: #000;
+    }
+
+    /* ローディング */
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.5rem;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #333;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- メニュー -->
+    <div id="menu-overlay">
+      <h1 class="menu-title">♟️ WebXR オセロ</h1>
+      <p class="menu-subtitle">Othello / Reversi in Virtual Reality</p>
+
+      <div class="difficulty-select">
+        <label>難易度を選択</label>
+        <div class="difficulty-buttons">
+          <button class="difficulty-btn" data-level="1">Easy</button>
+          <button class="difficulty-btn selected" data-level="2">Normal</button>
+          <button class="difficulty-btn" data-level="3">Hard</button>
+        </div>
+      </div>
+
+      <button class="menu-button primary" id="start-game">🎮 ゲームスタート</button>
+      <button class="menu-button vr" id="start-vr">🥽 VRモードで開始</button>
+      <p style="font-size: 0.8rem; color: #666; margin-top: 10px;" id="vr-status"></p>
+    </div>
+
+    <!-- ゲームUI -->
+    <div id="game-ui" class="hidden">
+      <div class="score-panel black">
+        <h3>⚫ あなた (黒)</h3>
+        <div class="score-value" id="black-score">2</div>
+      </div>
+
+      <div id="turn-indicator">あなたのターン</div>
+
+      <div class="score-panel white">
+        <h3>⚪ CPU (白)</h3>
+        <div class="score-value" id="white-score">2</div>
+      </div>
+    </div>
+
+    <div id="game-controls" class="hidden">
+      <button class="control-button" id="hint-btn">💡 ヒント</button>
+      <button class="control-button" id="sound-btn">🔊 サウンド</button>
+      <button class="control-button" id="restart-btn">🔄 リスタート</button>
+      <button class="control-button" id="menu-btn">📋 メニュー</button>
+    </div>
+
+    <!-- 結果画面 -->
+    <div id="result-overlay" class="hidden">
+      <h2 class="result-title" id="result-title">勝利！</h2>
+      <p class="result-score" id="result-score">黒: 32 - 白: 32</p>
+      <button class="menu-button primary" id="play-again">🔄 もう一度プレイ</button>
+      <button class="menu-button secondary" id="back-to-menu">📋 メニューに戻る</button>
+    </div>
+
+    <!-- ローディング -->
+    <div id="loading" class="hidden">
+      <div class="spinner"></div>
+      <p>Loading...</p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
