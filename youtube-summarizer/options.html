@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube要約 - 設定</title>
+  <title>YouTube Summary - Settings</title>
   <style>
     * {
       box-sizing: border-box;
@@ -288,22 +288,22 @@
   <div class="container">
     <h1>
       <div class="logo">Y</div>
-      YouTube要約 - 設定
+      YouTube Summary - Settings
     </h1>
-    <p class="subtitle">AIを使用して動画を要約します</p>
+    <p class="subtitle">Summarize videos using AI</p>
 
     <form id="options-form">
       <div class="form-group">
-        <label for="theme-mode">デザインモード</label>
+        <label for="theme-mode">Theme Mode</label>
         <select id="theme-mode">
-          <option value="system">システム設定に従う</option>
-          <option value="light">ライトモード</option>
-          <option value="dark">ダークモード</option>
+          <option value="system">Follow System</option>
+          <option value="light">Light Mode</option>
+          <option value="dark">Dark Mode</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="api-provider">AI プロバイダー</label>
+        <label for="api-provider">AI Provider</label>
         <select id="api-provider">
           <option value="claude">Claude (Anthropic)</option>
           <option value="openai">ChatGPT (OpenAI)</option>
@@ -312,9 +312,9 @@
       </div>
 
       <div class="form-group">
-        <label for="api-key">API キー</label>
+        <label for="api-key">API Key</label>
         <div class="input-wrapper">
-          <input type="password" id="api-key" placeholder="APIキーを入力..." autocomplete="off">
+          <input type="password" id="api-key" placeholder="Enter API key..." autocomplete="off">
           <button type="button" class="toggle-visibility" id="toggle-key">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -323,14 +323,14 @@
           </button>
         </div>
         <p class="hint" id="api-hint">
-          APIキーは <a href="https://console.anthropic.com/" target="_blank" id="api-link">Anthropic Console</a> で取得できます
+          Get your API key from <a href="https://console.anthropic.com/" target="_blank" id="api-link">Anthropic Console</a>
         </p>
       </div>
 
       <div id="api-status"></div>
 
       <div class="api-info" id="api-info">
-        <strong>Claude:</strong> 高品質な日本語要約に最適。claude-sonnet-4-20250514を使用。
+        <strong>Claude:</strong> Best for high-quality summaries. Uses claude-sonnet-4-20250514.
       </div>
 
       <div class="btn-group">
@@ -339,7 +339,7 @@
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
             <polyline points="22 4 12 14.01 9 11.01"></polyline>
           </svg>
-          検証
+          Verify
         </button>
         <button type="submit" class="btn btn-primary" id="save-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -347,7 +347,7 @@
             <polyline points="17 21 17 13 7 13 7 21"></polyline>
             <polyline points="7 3 7 8 15 8"></polyline>
           </svg>
-          保存して閉じる
+          Save & Close
         </button>
       </div>
     </form>

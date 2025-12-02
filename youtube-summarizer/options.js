@@ -19,7 +19,7 @@ const API_CONFIGS = {
     placeholder: 'sk-ant-api03-...',
     hint: 'Anthropic Console',
     url: 'https://console.anthropic.com/',
-    info: '<strong>Claude:</strong> 高品質な日本語要約に最適。claude-sonnet-4-20250514を使用。',
+    info: '<strong>Claude:</strong> Best for high-quality summaries. Uses claude-sonnet-4-20250514.',
     validatePrefix: (key) => key.startsWith('sk-ant-')
   },
   openai: {
@@ -27,7 +27,7 @@ const API_CONFIGS = {
     placeholder: 'sk-...',
     hint: 'OpenAI Platform',
     url: 'https://platform.openai.com/api-keys',
-    info: '<strong>OpenAI:</strong> GPT-4oを使用。高速で安定した要約を生成。',
+    info: '<strong>OpenAI:</strong> Uses GPT-4o. Fast and reliable summaries.',
     validatePrefix: (key) => key.startsWith('sk-')
   },
   gemini: {
@@ -35,7 +35,7 @@ const API_CONFIGS = {
     placeholder: 'AIza...',
     hint: 'Google AI Studio',
     url: 'https://aistudio.google.com/app/apikey',
-    info: '<strong>Gemini:</strong> Gemini 1.5 Proを使用。長い動画にも対応。',
+    info: '<strong>Gemini:</strong> Uses Gemini 1.5 Pro. Handles long videos well.',
     validatePrefix: (key) => key.startsWith('AIza')
   }
 };
@@ -64,7 +64,7 @@ themeModeSelect.addEventListener('change', async () => {
   const themeMode = themeModeSelect.value;
   try {
     await chrome.storage.sync.set({ themeMode });
-    showNotification('テーマを変更しました', 'success');
+    showNotification('Theme changed', 'success');
   } catch (error) {
     console.error('Failed to save theme:', error);
   }
@@ -143,17 +143,17 @@ verifyBtn.addEventListener('click', async () => {
   const config = API_CONFIGS[provider];
 
   if (!apiKey) {
-    showStatus('APIキーを入力してください', 'error');
+    showStatus('Please enter an API key', 'error');
     return;
   }
 
   if (!config.validatePrefix(apiKey)) {
-    showStatus(`有効な${config.name} APIキーを入力してください`, 'error');
+    showStatus(`Please enter a valid ${config.name} API key`, 'error');
     return;
   }
 
   verifyBtn.disabled = true;
-  showStatus('APIキーを検証中...', 'verifying');
+  showStatus('Verifying API key...', 'verifying');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -163,12 +163,12 @@ verifyBtn.addEventListener('click', async () => {
     });
 
     if (response && response.success) {
-      showStatus('APIキーは有効です', 'success');
+      showStatus('API key is valid', 'success');
     } else {
-      showStatus(response?.error || 'APIキーが無効です', 'error');
+      showStatus(response?.error || 'API key is invalid', 'error');
     }
   } catch (error) {
-    showStatus('検証に失敗しました: ' + error.message, 'error');
+    showStatus('Verification failed: ' + error.message, 'error');
   } finally {
     verifyBtn.disabled = false;
   }
@@ -183,12 +183,12 @@ form.addEventListener('submit', async (e) => {
   const config = API_CONFIGS[provider];
 
   if (!apiKey) {
-    showNotification('APIキーを入力してください', 'error');
+    showNotification('Please enter an API key', 'error');
     return;
   }
 
   if (!config.validatePrefix(apiKey)) {
-    showNotification(`有効な${config.name} APIキーを入力してください`, 'error');
+    showNotification(`Please enter a valid ${config.name} API key`, 'error');
     return;
   }
 
@@ -196,7 +196,7 @@ form.addEventListener('submit', async (e) => {
 
   try {
     // Verify before saving
-    showStatus('APIキーを検証中...', 'verifying');
+    showStatus('Verifying API key...', 'verifying');
 
     const verifyResponse = await chrome.runtime.sendMessage({
       action: 'verifyApiKey',
@@ -205,8 +205,8 @@ form.addEventListener('submit', async (e) => {
     });
 
     if (!verifyResponse || !verifyResponse.success) {
-      showStatus(verifyResponse?.error || 'APIキーが無効です', 'error');
-      showNotification('APIキーが無効です。確認してください。', 'error');
+      showStatus(verifyResponse?.error || 'API key is invalid', 'error');
+      showNotification('API key is invalid. Please check.', 'error');
       return;
     }
 
@@ -216,8 +216,8 @@ form.addEventListener('submit', async (e) => {
       apiKey: apiKey
     });
 
-    showStatus('APIキーは有効です', 'success');
-    showNotification('設定を保存しました', 'success');
+    showStatus('API key is valid', 'success');
+    showNotification('Settings saved', 'success');
 
     // Close the options page after a short delay
     setTimeout(() => {
@@ -226,7 +226,7 @@ form.addEventListener('submit', async (e) => {
 
   } catch (error) {
     console.error('Failed to save settings:', error);
-    showNotification('保存に失敗しました', 'error');
+    showNotification('Failed to save settings', 'error');
   } finally {
     saveBtn.disabled = false;
   }

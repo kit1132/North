@@ -73,7 +73,7 @@ function createUI() {
       <polyline points="10 9 9 9 8 9"></polyline>
     </svg>
   `;
-  toggleBtn.title = 'トランスクリプトを表示';
+  toggleBtn.title = 'Show transcript';
   toggleBtn.addEventListener('click', togglePanel);
   document.body.appendChild(toggleBtn);
 
@@ -84,7 +84,7 @@ function createUI() {
     <div class="yt-summarizer-header">
       <div class="yt-summarizer-header-left">
         <div class="yt-summarizer-logo">Y</div>
-        <span class="yt-summarizer-title">YouTube要約</span>
+        <span class="yt-summarizer-title">YouTube Summary</span>
       </div>
       <button class="yt-summarizer-close-btn" id="yt-summarizer-close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -95,8 +95,8 @@ function createUI() {
     </div>
 
     <div class="yt-summarizer-tabs">
-      <button class="yt-summarizer-tab active" data-tab="transcript">トランスクリプト</button>
-      <button class="yt-summarizer-tab" data-tab="summary">要約</button>
+      <button class="yt-summarizer-tab active" data-tab="transcript">Transcript</button>
+      <button class="yt-summarizer-tab" data-tab="summary">Summary</button>
     </div>
 
     <div class="yt-summarizer-content">
@@ -108,14 +108,14 @@ function createUI() {
               <polyline points="23 4 23 10 17 10"></polyline>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
             </svg>
-            読み込む
+            Load
           </button>
           <button class="yt-summarizer-btn yt-summarizer-btn-secondary" id="yt-summarizer-copy-transcript-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
-            コピー
+            Copy
           </button>
         </div>
         <div class="yt-summarizer-transcript-list" id="yt-summarizer-transcript-list">
@@ -126,7 +126,7 @@ function createUI() {
                 <polyline points="14 2 14 8 20 8"></polyline>
               </svg>
             </div>
-            <p class="yt-summarizer-empty-text">「読み込む」をクリックして<br>トランスクリプトを取得</p>
+            <p class="yt-summarizer-empty-text">Click "Load" to<br>get the transcript</p>
           </div>
         </div>
       </div>
@@ -140,14 +140,14 @@ function createUI() {
               <path d="M18 20V4"></path>
               <path d="M6 20v-4"></path>
             </svg>
-            要約する
+            Summarize
           </button>
           <button class="yt-summarizer-btn yt-summarizer-btn-secondary" id="yt-summarizer-copy-summary-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
-            コピー
+            Copy
           </button>
         </div>
         <div class="yt-summarizer-summary-content" id="yt-summarizer-summary-content">
@@ -159,7 +159,7 @@ function createUI() {
                 <path d="M6 20v-4"></path>
               </svg>
             </div>
-            <p class="yt-summarizer-empty-text">「要約する」をクリックして<br>AIで要約を生成</p>
+            <p class="yt-summarizer-empty-text">Click "Summarize" to<br>generate AI summary</p>
           </div>
         </div>
       </div>
@@ -231,7 +231,7 @@ async function loadTranscript() {
   listEl.innerHTML = `
     <div class="yt-summarizer-loading">
       <div class="yt-summarizer-spinner"></div>
-      <span class="yt-summarizer-loading-text">トランスクリプトを読み込み中...</span>
+      <span class="yt-summarizer-loading-text">Loading transcript...</span>
     </div>
   `;
 
@@ -269,7 +269,7 @@ function updateTranscriptUI() {
             <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
         </div>
-        <p class="yt-summarizer-empty-text">「読み込む」をクリックして<br>トランスクリプトを取得</p>
+        <p class="yt-summarizer-empty-text">Click "Load" to<br>get the transcript</p>
       </div>
     `;
     return;
@@ -308,7 +308,7 @@ function seekVideo(seconds) {
 // Copy transcript to clipboard
 async function copyTranscript() {
   if (transcriptData.length === 0) {
-    showNotification('トランスクリプトがありません');
+    showNotification('No transcript available');
     return;
   }
 
@@ -316,9 +316,9 @@ async function copyTranscript() {
 
   try {
     await navigator.clipboard.writeText(text);
-    showNotification('トランスクリプトをコピーしました');
+    showNotification('Transcript copied to clipboard');
   } catch (error) {
-    showNotification('コピーに失敗しました');
+    showNotification('Failed to copy');
   }
 }
 
@@ -348,7 +348,7 @@ async function summarize() {
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
-        <p class="yt-summarizer-error-message">APIキーが設定されていません<br>拡張機能の設定画面から設定してください</p>
+        <p class="yt-summarizer-error-message">API key not set<br>Please configure in extension settings</p>
       </div>
     `;
     return;
@@ -359,7 +359,7 @@ async function summarize() {
   contentEl.innerHTML = `
     <div class="yt-summarizer-loading">
       <div class="yt-summarizer-spinner"></div>
-      <span class="yt-summarizer-loading-text">要約を生成中...</span>
+      <span class="yt-summarizer-loading-text">Generating summary...</span>
     </div>
   `;
 
@@ -372,7 +372,7 @@ async function summarize() {
     });
 
     if (!response || !response.success) {
-      throw new Error(response?.error || '要約の生成に失敗しました');
+      throw new Error(response?.error || 'Failed to generate summary');
     }
 
     currentSummary = response.summary;
@@ -380,7 +380,7 @@ async function summarize() {
 
     // Auto copy
     await navigator.clipboard.writeText(currentSummary);
-    showNotification('要約をクリップボードにコピーしました');
+    showNotification('Summary copied to clipboard');
 
   } catch (error) {
     contentEl.innerHTML = `
@@ -414,7 +414,7 @@ function updateSummaryUI(state) {
             <path d="M6 20v-4"></path>
           </svg>
         </div>
-        <p class="yt-summarizer-empty-text">「要約する」をクリックして<br>AIで要約を生成</p>
+        <p class="yt-summarizer-empty-text">Click "Summarize" to<br>generate AI summary</p>
       </div>
     `;
     return;
@@ -428,15 +428,15 @@ function updateSummaryUI(state) {
 // Copy summary to clipboard
 async function copySummary() {
   if (!currentSummary) {
-    showNotification('要約がありません');
+    showNotification('No summary available');
     return;
   }
 
   try {
     await navigator.clipboard.writeText(currentSummary);
-    showNotification('要約をコピーしました');
+    showNotification('Summary copied');
   } catch (error) {
-    showNotification('コピーに失敗しました');
+    showNotification('Failed to copy');
   }
 }
 
@@ -520,16 +520,16 @@ function getVideoId() {
 async function getTranscriptData() {
   const videoId = getVideoId();
   if (!videoId) {
-    throw new Error('動画IDが見つかりません');
+    throw new Error('Video ID not found');
   }
 
   // Try multiple methods in order of reliability
   const methods = [
     { name: 'Innertube API', fn: () => getTranscriptFromInnertube(videoId) },
-    { name: 'ページ埋め込みデータ', fn: () => getTranscriptFromPage() },
+    { name: 'Page embedded data', fn: () => getTranscriptFromPage() },
     { name: 'YouTube API', fn: () => getTranscriptFromYouTubeAPI(videoId) },
-    { name: 'ページ再取得', fn: () => getTranscriptFromFetch(videoId) },
-    { name: '文字起こしパネル', fn: () => getTranscriptFromPanel() }
+    { name: 'Page refetch', fn: () => getTranscriptFromFetch(videoId) },
+    { name: 'Transcript panel', fn: () => getTranscriptFromPanel() }
   ];
 
   for (const method of methods) {
@@ -545,7 +545,7 @@ async function getTranscriptData() {
     }
   }
 
-  throw new Error('この動画には字幕がありません。字幕が有効になっているか確認してください。');
+  throw new Error('No subtitles available for this video. Please check if captions are enabled.');
 }
 
 // Fetch transcript as formatted string (for popup)
@@ -555,7 +555,7 @@ async function getTranscript() {
 
   const maxLength = 100000;
   if (formattedTranscript.length > maxLength) {
-    return formattedTranscript.substring(0, maxLength) + '\n\n[注: トランスクリプトが長いため、一部省略されています]';
+    return formattedTranscript.substring(0, maxLength) + '\n\n[Note: Transcript truncated due to length]';
   }
 
   return formattedTranscript;
@@ -1091,9 +1091,9 @@ function parseTranscriptXML(xml) {
     // Check for parse error
     const parseError = doc.querySelector('parsererror');
     if (parseError) {
-      throw new Error('字幕データの形式が不正です');
+      throw new Error('Invalid subtitle data format');
     }
-    throw new Error('字幕データが見つかりません');
+    throw new Error('Subtitle data not found');
   }
 
   const transcriptParts = [];

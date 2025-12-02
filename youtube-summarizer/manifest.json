@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "YouTube要約",
-  "version": "1.6.0",
-  "description": "YouTubeの動画トランスクリプトをAI（Claude/OpenAI/Gemini）で要約するChrome拡張機能",
+  "name": "YouTube Summary",
+  "version": "1.7.0",
+  "description": "Chrome extension to summarize YouTube video transcripts using AI (Claude/OpenAI/Gemini)",
   "permissions": [
     "activeTab",
     "storage",

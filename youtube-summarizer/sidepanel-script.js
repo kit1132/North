@@ -170,13 +170,13 @@ async function loadTranscript() {
   transcriptListEl.innerHTML = `
     <div class="loading">
       <div class="spinner"></div>
-      <span class="loading-text">トランスクリプトを読み込み中...</span>
+      <span class="loading-text">Loading transcript...</span>
     </div>
   `;
 
   try {
     if (!currentTabId) {
-      throw new Error('タブが見つかりません');
+      throw new Error('Tab not found');
     }
 
     // Execute transcript extraction in content script
@@ -187,7 +187,7 @@ async function loadTranscript() {
 
     const result = results[0]?.result;
     if (!result || !result.success) {
-      throw new Error(result?.error || 'トランスクリプトの取得に失敗しました');
+      throw new Error(result?.error || 'Failed to get transcript');
     }
 
     transcriptData = result.data;
@@ -222,7 +222,7 @@ function updateTranscriptUI() {
             <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
         </div>
-        <p class="empty-text">「読み込む」をクリックして<br>トランスクリプトを取得</p>
+        <p class="empty-text">Click "Load" to<br>get the transcript</p>
       </div>
     `;
     return;
@@ -270,7 +270,7 @@ async function seekVideo(seconds) {
 // Copy transcript
 async function copyTranscript() {
   if (transcriptData.length === 0) {
-    showNotification('トランスクリプトがありません');
+    showNotification('No transcript available');
     return;
   }
 
@@ -278,9 +278,9 @@ async function copyTranscript() {
 
   try {
     await navigator.clipboard.writeText(text);
-    showNotification('トランスクリプトをコピーしました');
+    showNotification('Transcript copied to clipboard');
   } catch (error) {
-    showNotification('コピーに失敗しました');
+    showNotification('Failed to copy');
   }
 }
 
@@ -306,7 +306,7 @@ async function summarize() {
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
-        <p class="error-message">APIキーが設定されていません<br>設定画面から設定してください</p>
+        <p class="error-message">API key not set<br>Please configure in settings</p>
       </div>
     `;
     return;
@@ -316,7 +316,7 @@ async function summarize() {
   summaryContentEl.innerHTML = `
     <div class="loading">
       <div class="spinner"></div>
-      <span class="loading-text">要約を生成中...</span>
+      <span class="loading-text">Generating summary...</span>
     </div>
   `;
 
@@ -330,7 +330,7 @@ async function summarize() {
     });
 
     if (!response || !response.success) {
-      throw new Error(response?.error || '要約の生成に失敗しました');
+      throw new Error(response?.error || 'Failed to generate summary');
     }
 
     currentSummary = response.summary;
@@ -338,7 +338,7 @@ async function summarize() {
 
     // Auto copy
     await navigator.clipboard.writeText(currentSummary);
-    showNotification('要約をクリップボードにコピーしました');
+    showNotification('Summary copied to clipboard');
 
   } catch (error) {
     summaryContentEl.innerHTML = `
@@ -370,7 +370,7 @@ function updateSummaryUI(state) {
             <path d="M6 20v-4"></path>
           </svg>
         </div>
-        <p class="empty-text">「要約する」をクリックして<br>AIで要約を生成</p>
+        <p class="empty-text">Click "Summarize" to<br>generate AI summary</p>
       </div>
     `;
     return;
@@ -385,7 +385,7 @@ function updateSummaryUI(state) {
       <div class="ai-web-link-section">
         <hr style="margin: 16px 0; border: none; border-top: 1px solid #e5e7eb;">
         <p style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">
-          💡 要約内容をAIに質問して深掘りできます
+          💡 Ask AI to explore this summary further
         </p>
         <button id="open-ai-web-btn" class="ai-web-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -393,11 +393,11 @@ function updateSummaryUI(state) {
             <polyline points="15 3 21 3 21 9"></polyline>
             <line x1="10" y1="14" x2="21" y2="3"></line>
           </svg>
-          <span>AIで深掘りする</span>
+          <span>Explore with AI</span>
         </button>
         <p style="font-size: 11px; color: #9ca3af; margin-top: 6px;">
-          クリックするとAIのWeb版が開き、要約がクリップボードにコピーされます。<br>
-          ペーストして質問を追加してください。
+          Opens AI web interface and copies summary to clipboard.<br>
+          Paste and add your questions.
         </p>
       </div>
     `;
@@ -421,13 +421,13 @@ async function openAIWebWithSummary() {
     if (response?.url) {
       // Open the AI web interface in a new tab
       chrome.tabs.create({ url: response.url });
-      showNotification(`要約をコピーしました。${getProviderName(response.provider)}で貼り付けてください。`);
+      showNotification(`Summary copied. Paste in ${getProviderName(response.provider)}.`);
     } else {
-      showNotification('AIのURLを取得できませんでした');
+      showNotification('Could not get AI URL');
     }
   } catch (error) {
     console.error('Error opening AI web:', error);
-    showNotification('エラーが発生しました');
+    showNotification('An error occurred');
   }
 }
 
@@ -444,15 +444,15 @@ function getProviderName(provider) {
 // Copy summary
 async function copySummary() {
   if (!currentSummary) {
-    showNotification('要約がありません');
+    showNotification('No summary available');
     return;
   }
 
   try {
     await navigator.clipboard.writeText(currentSummary);
-    showNotification('要約をコピーしました');
+    showNotification('Summary copied');
   } catch (error) {
-    showNotification('コピーに失敗しました');
+    showNotification('Failed to copy');
   }
 }
 
@@ -519,9 +519,9 @@ function extractTranscript() {
     if (textElements.length === 0) {
       const parseError = doc.querySelector('parsererror');
       if (parseError) {
-        throw new Error('字幕データの形式が不正です');
+        throw new Error('Invalid subtitle data format');
       }
-      throw new Error('字幕データが空です');
+      throw new Error('Subtitle data is empty');
     }
 
     const transcriptParts = [];
@@ -563,12 +563,12 @@ function extractTranscript() {
                         captionTracks[0];
 
     if (!selectedTrack) {
-      throw new Error('適切な字幕トラックが見つかりません');
+      throw new Error('No suitable subtitle track found');
     }
 
     let baseUrl = selectedTrack.baseUrl;
     if (!baseUrl) {
-      throw new Error('字幕URLがありません');
+      throw new Error('Subtitle URL not found');
     }
 
     // Unescape URL if needed
@@ -578,7 +578,7 @@ function extractTranscript() {
 
     const response = await fetch(baseUrl);
     if (!response.ok) {
-      throw new Error('字幕の取得に失敗しました');
+      throw new Error('Failed to fetch subtitles');
     }
     const xml = await response.text();
     return parseTranscriptXML(xml);
@@ -725,7 +725,7 @@ function extractTranscript() {
       }
     }
 
-    throw new Error('この動画には字幕がありません。字幕が有効になっているか確認してください。');
+    throw new Error('No subtitles available for this video. Please check if captions are enabled.');
   }
 
   return getTranscript()

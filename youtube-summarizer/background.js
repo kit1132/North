@@ -54,46 +54,45 @@ const API_CONFIGS = {
 };
 
 // Summary prompt template
-const SUMMARY_PROMPT = `あなたはYouTube動画の要約アシスタントです。
-以下のトランスクリプトを日本語で要約してください。
+const SUMMARY_PROMPT = `You are a YouTube video summary assistant.
+Please summarize the following transcript.
 
-## 出力フォーマット（必ずこの形式で）
+## Output Format (use this format exactly)
 
-### 結論（300-500文字）
-[動画の核心を詳しく説明。視聴者が何を学べるか、なぜ重要かを含める]
+### Conclusion (300-500 characters)
+[Explain the core message in detail. Include what viewers can learn and why it matters]
 
-### タイムライン要約
-| 時間 | トピック | 要点 |
-|------|----------|------|
-| 0:00 | [トピック名] | [1-2文で要点] |
-| X:XX | [トピック名] | [1-2文で要点] |
-（主要なセクションごとに記載）
+### Timeline Summary
+| Time | Topic | Key Points |
+|------|-------|------------|
+| 0:00 | [Topic name] | [1-2 sentence summary] |
+| X:XX | [Topic name] | [1-2 sentence summary] |
+(Include major sections)
 
-### 重要ポイント（3-5個）
-- [具体的なポイント1]
-- [具体的なポイント2]
-- [具体的なポイント3]
+### Key Points (3-5)
+- [Specific point 1]
+- [Specific point 2]
+- [Specific point 3]
 
-### 実践アクション
-この動画から得られる具体的な行動ステップ：
-1. [すぐできること]
-2. [次のステップ]
+### Action Items
+Concrete action steps from this video:
+1. [Immediate action]
+2. [Next step]
 
-### 関連する問い
-この内容を深めるための問いかけ：
-- [考えるべき問い1]
-- [考えるべき問い2]
+### Related Questions
+Questions to explore this topic further:
+- [Question to consider 1]
+- [Question to consider 2]
 
 ---
 
-## ルール
-- 英語の動画でも必ず日本語で要約
-- 抽象的な表現を避け、具体的に書く
-- 長すぎる説明は避け、要点を明確に
-- 表はマークダウン形式で出力
-- 結論は必ず300-500文字で詳しく書く
+## Rules
+- Avoid abstract expressions, be specific
+- Keep explanations concise, make key points clear
+- Output tables in markdown format
+- Conclusion must be 300-500 characters with detail
 
-## トランスクリプト：
+## Transcript:
 `;
 
 // Listen for messages
@@ -142,14 +141,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Handle summarization request
 async function handleSummarize(transcript, videoId) {
   if (!transcript) {
-    throw new Error('トランスクリプトがありません');
+    throw new Error('No transcript available');
   }
 
   // Check cache first
   if (videoId) {
     const cached = summaryCache.get(videoId);
     if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
-      console.log('[YouTube要約] キャッシュから要約を取得');
+      console.log('[YouTube Summary] Retrieved from cache');
       return cached.summary;
     }
   }
@@ -160,14 +159,14 @@ async function handleSummarize(transcript, videoId) {
   const apiKey = settings.apiKey;
 
   if (!apiKey) {
-    throw new Error('APIキーが設定されていません');
+    throw new Error('API key not set');
   }
 
   // Truncate transcript if too long to save API costs
   const maxTranscriptLength = 50000;
   let truncatedTranscript = transcript;
   if (transcript.length > maxTranscriptLength) {
-    truncatedTranscript = transcript.substring(0, maxTranscriptLength) + '\n\n[注: トランスクリプトが長いため省略]';
+    truncatedTranscript = transcript.substring(0, maxTranscriptLength) + '\n\n[Note: Transcript truncated due to length]';
   }
 
   const fullPrompt = SUMMARY_PROMPT + truncatedTranscript;
@@ -185,7 +184,7 @@ async function handleSummarize(transcript, videoId) {
       summary = await callGeminiAPI(fullPrompt, apiKey);
       break;
     default:
-      throw new Error('不明なAPIプロバイダーです');
+      throw new Error('Unknown API provider');
   }
 
   // Cache the result
@@ -210,7 +209,7 @@ async function verifyApiKey(provider, apiKey) {
       case 'gemini':
         return await verifyGeminiKey(apiKey);
       default:
-        return { success: false, error: '不明なAPIプロバイダーです' };
+        return { success: false, error: 'Unknown API provider' };
     }
   } catch (error) {
     return { success: false, error: error.message };
@@ -243,7 +242,7 @@ async function callClaudeAPI(prompt, apiKey) {
   if (textContent) {
     return textContent.text;
   }
-  throw new Error('APIからの応答が不正です');
+  throw new Error('Invalid API response');
 }
 
 async function verifyClaudeKey(apiKey) {
@@ -267,11 +266,11 @@ async function verifyClaudeKey(apiKey) {
   }
 
   if (response.status === 401) {
-    return { success: false, error: 'APIキーが無効です' };
+    return { success: false, error: 'API key is invalid' };
   }
 
   const errorData = await response.json().catch(() => ({}));
-  return { success: false, error: errorData.error?.message || `エラー: ${response.status}` };
+  return { success: false, error: errorData.error?.message || `Error: ${response.status}` };
 }
 
 // ===== OpenAI API =====
@@ -297,7 +296,7 @@ async function callOpenAIAPI(prompt, apiKey) {
   if (data.choices?.[0]?.message?.content) {
     return data.choices[0].message.content;
   }
-  throw new Error('APIからの応答が不正です');
+  throw new Error('Invalid API response');
 }
 
 async function verifyOpenAIKey(apiKey) {
@@ -313,11 +312,11 @@ async function verifyOpenAIKey(apiKey) {
   }
 
   if (response.status === 401) {
-    return { success: false, error: 'APIキーが無効です' };
+    return { success: false, error: 'API key is invalid' };
   }
 
   const errorData = await response.json().catch(() => ({}));
-  return { success: false, error: errorData.error?.message || `エラー: ${response.status}` };
+  return { success: false, error: errorData.error?.message || `Error: ${response.status}` };
 }
 
 // ===== Gemini API =====
@@ -346,7 +345,7 @@ async function callGeminiAPI(prompt, apiKey) {
   if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
     return data.candidates[0].content.parts[0].text;
   }
-  throw new Error('APIからの応答が不正です');
+  throw new Error('Invalid API response');
 }
 
 async function verifyGeminiKey(apiKey) {
@@ -360,11 +359,11 @@ async function verifyGeminiKey(apiKey) {
   }
 
   if (response.status === 400 || response.status === 403) {
-    return { success: false, error: 'APIキーが無効です' };
+    return { success: false, error: 'API key is invalid' };
   }
 
   const errorData = await response.json().catch(() => ({}));
-  return { success: false, error: errorData.error?.message || `エラー: ${response.status}` };
+  return { success: false, error: errorData.error?.message || `Error: ${response.status}` };
 }
 
 // ===== Error Handling =====
@@ -372,14 +371,14 @@ async function handleAPIError(response, provider) {
   const errorData = await response.json().catch(() => ({}));
 
   if (response.status === 401) {
-    return new Error('APIキーが無効です');
+    return new Error('API key is invalid');
   } else if (response.status === 429) {
-    return new Error('API制限に達しました。しばらく待ってから再試行してください');
+    return new Error('API rate limit reached. Please wait and try again');
   } else if (response.status === 400) {
-    return new Error(errorData.error?.message || 'リクエストエラーが発生しました');
+    return new Error(errorData.error?.message || 'Request error occurred');
   } else if (response.status === 500 || response.status === 503) {
-    return new Error(`${provider}サーバーエラーが発生しました`);
+    return new Error(`${provider} server error occurred`);
   }
 
-  return new Error(`${provider}エラー (${response.status}): ${errorData.error?.message || '不明なエラー'}`);
+  return new Error(`${provider} error (${response.status}): ${errorData.error?.message || 'Unknown error'}`);
 }
