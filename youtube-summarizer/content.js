@@ -568,21 +568,54 @@ async function getTranscriptFromPage() {
   for (const script of scripts) {
     const content = script.textContent || '';
 
-    // Try different patterns
+    // Skip if no relevant content
+    if (!content.includes('captions') && !content.includes('captionTracks')) {
+      continue;
+    }
+
+    // Try different patterns - more comprehensive matching
     const patterns = [
-      /ytInitialPlayerResponse\s*=\s*(\{.+?\});(?:\s*var|<\/script)/s,
-      /var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\});/s,
-      /ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?"captions"[\s\S]*?\});/
+      // Standard ytInitialPlayerResponse patterns
+      /ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;?\s*(?:var|let|const|<\/script|$)/s,
+      /var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;/s,
+      // Pattern with captions specifically
+      /ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?"captionTracks"[\s\S]*?\})\s*;/,
+      // Embedded in other variables
+      /\{"captions":\{"playerCaptionsTracklistRenderer":\{"captionTracks":(\[[\s\S]*?\]),"audioTracks"/
     ];
 
     for (const pattern of patterns) {
       const match = content.match(pattern);
       if (match) {
         try {
-          playerResponse = JSON.parse(match[1]);
-          break;
+          // Handle array match (last pattern)
+          if (match[1].startsWith('[')) {
+            const captionTracks = JSON.parse(match[1]);
+            if (captionTracks && captionTracks.length > 0) {
+              console.log('[YouTube要約] captionTracksを直接抽出');
+              return await fetchCaptionTrack(captionTracks);
+            }
+          } else {
+            playerResponse = JSON.parse(match[1]);
+            if (playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks) {
+              break;
+            }
+            playerResponse = null;
+          }
         } catch (e) {
-          continue;
+          // Try to extract just the captionTracks portion
+          try {
+            const captionMatch = content.match(/"captionTracks":\s*(\[[\s\S]*?\])(?=,"audioTracks"|,"translationLanguages"|,"|$)/);
+            if (captionMatch) {
+              const captionTracks = JSON.parse(captionMatch[1]);
+              if (captionTracks && captionTracks.length > 0) {
+                console.log('[YouTube要約] captionTracksを部分抽出');
+                return await fetchCaptionTrack(captionTracks);
+              }
+            }
+          } catch (e2) {
+            continue;
+          }
         }
       }
     }
@@ -590,6 +623,22 @@ async function getTranscriptFromPage() {
   }
 
   if (!playerResponse) {
+    // Try extracting captionTracks directly from any script
+    for (const script of scripts) {
+      const content = script.textContent || '';
+      const captionMatch = content.match(/"captionTracks":\s*(\[[\s\S]*?\])(?=,"audioTracks"|,"translationLanguages"|,"defaultAudioTrackIndex")/);
+      if (captionMatch) {
+        try {
+          const captionTracks = JSON.parse(captionMatch[1]);
+          if (captionTracks && captionTracks.length > 0) {
+            console.log('[YouTube要約] スクリプトからcaptionTracksを抽出');
+            return await fetchCaptionTrack(captionTracks);
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
     return null;
   }
 
@@ -598,22 +647,60 @@ async function getTranscriptFromPage() {
 
 // Method 2: Get from YouTube's internal API
 async function getTranscriptFromYouTubeAPI(videoId) {
-  // Try to get player response from window object
-  const playerResponse = await new Promise((resolve) => {
+  // Try to get player response from window object using multiple methods
+  const result = await new Promise((resolve) => {
     const script = document.createElement('script');
     script.textContent = `
       (function() {
         try {
           var data = null;
-          if (typeof ytInitialPlayerResponse !== 'undefined') {
+          var captionTracks = null;
+
+          // Method 1: ytInitialPlayerResponse
+          if (typeof ytInitialPlayerResponse !== 'undefined' && ytInitialPlayerResponse) {
             data = ytInitialPlayerResponse;
-          } else if (typeof ytplayer !== 'undefined' && ytplayer.config) {
-            data = ytplayer.config.args.player_response ?
-              JSON.parse(ytplayer.config.args.player_response) : null;
           }
-          window.postMessage({ type: 'YT_PLAYER_RESPONSE_V2', data: data }, '*');
+
+          // Method 2: ytplayer.config
+          if (!data && typeof ytplayer !== 'undefined' && ytplayer && ytplayer.config) {
+            if (ytplayer.config.args && ytplayer.config.args.player_response) {
+              try {
+                data = JSON.parse(ytplayer.config.args.player_response);
+              } catch(e) {}
+            }
+          }
+
+          // Method 3: movie_player element
+          if (!data) {
+            var player = document.getElementById('movie_player');
+            if (player && player.getPlayerResponse) {
+              try {
+                data = player.getPlayerResponse();
+              } catch(e) {}
+            }
+          }
+
+          // Method 4: yt.config_
+          if (!data && typeof yt !== 'undefined' && yt.config_ && yt.config_.PLAYER_VARS) {
+            if (yt.config_.PLAYER_VARS.embedded_player_response) {
+              try {
+                data = JSON.parse(yt.config_.PLAYER_VARS.embedded_player_response);
+              } catch(e) {}
+            }
+          }
+
+          // Try to extract captionTracks from data
+          if (data && data.captions && data.captions.playerCaptionsTracklistRenderer) {
+            captionTracks = data.captions.playerCaptionsTracklistRenderer.captionTracks;
+          }
+
+          window.postMessage({
+            type: 'YT_PLAYER_RESPONSE_V3',
+            data: data,
+            captionTracks: captionTracks
+          }, '*');
         } catch(e) {
-          window.postMessage({ type: 'YT_PLAYER_RESPONSE_V2', data: null, error: e.message }, '*');
+          window.postMessage({ type: 'YT_PLAYER_RESPONSE_V3', data: null, error: e.message }, '*');
         }
       })();
     `;
@@ -621,9 +708,9 @@ async function getTranscriptFromYouTubeAPI(videoId) {
     script.remove();
 
     const handler = (event) => {
-      if (event.data && event.data.type === 'YT_PLAYER_RESPONSE_V2') {
+      if (event.data && event.data.type === 'YT_PLAYER_RESPONSE_V3') {
         window.removeEventListener('message', handler);
-        resolve(event.data.data);
+        resolve(event.data);
       }
     };
     window.addEventListener('message', handler);
@@ -634,11 +721,22 @@ async function getTranscriptFromYouTubeAPI(videoId) {
     }, 3000);
   });
 
-  if (!playerResponse) {
+  if (!result) {
     return null;
   }
 
-  return extractCaptionsFromResponse(playerResponse);
+  // If we got captionTracks directly, use them
+  if (result.captionTracks && result.captionTracks.length > 0) {
+    console.log('[YouTube要約] APIからcaptionTracksを取得');
+    return await fetchCaptionTrack(result.captionTracks);
+  }
+
+  // Otherwise try to extract from full response
+  if (result.data) {
+    return extractCaptionsFromResponse(result.data);
+  }
+
+  return null;
 }
 
 // Method 3: Fetch the page and extract captions
@@ -650,8 +748,11 @@ async function getTranscriptFromFetch(videoId) {
   });
   const html = await response.text();
 
-  // Try to find captionTracks in the HTML
+  // Try to find captionTracks in the HTML with multiple patterns
   const patterns = [
+    /"captionTracks":\s*(\[[\s\S]*?\])(?=,"audioTracks")/,
+    /"captionTracks":\s*(\[[\s\S]*?\])(?=,"translationLanguages")/,
+    /"captionTracks":\s*(\[[\s\S]*?\])(?=,"defaultAudioTrackIndex")/,
     /"captionTracks":\s*(\[[\s\S]*?\])(?=,\s*")/,
     /"captions":\s*\{[\s\S]*?"captionTracks":\s*(\[[\s\S]*?\])/
   ];
@@ -660,13 +761,44 @@ async function getTranscriptFromFetch(videoId) {
     const match = html.match(pattern);
     if (match) {
       try {
-        const captionTracks = JSON.parse(match[1]);
+        // Clean up the JSON string (remove any trailing incomplete data)
+        let jsonStr = match[1];
+        // Find the last complete object in the array
+        let depth = 0;
+        let lastValidEnd = 0;
+        for (let i = 0; i < jsonStr.length; i++) {
+          if (jsonStr[i] === '{' || jsonStr[i] === '[') depth++;
+          if (jsonStr[i] === '}' || jsonStr[i] === ']') {
+            depth--;
+            if (depth === 0) lastValidEnd = i + 1;
+          }
+        }
+        if (lastValidEnd > 0 && lastValidEnd < jsonStr.length) {
+          jsonStr = jsonStr.substring(0, lastValidEnd);
+        }
+
+        const captionTracks = JSON.parse(jsonStr);
         if (captionTracks && captionTracks.length > 0) {
+          console.log('[YouTube要約] ページ再取得からcaptionTracksを抽出');
           return await fetchCaptionTrack(captionTracks);
         }
       } catch (e) {
         console.log('[YouTube要約] キャプショントラックのパース失敗:', e.message);
       }
+    }
+  }
+
+  // Try to find baseUrl directly
+  const baseUrlMatch = html.match(/"baseUrl":\s*"(https:\/\/www\.youtube\.com\/api\/timedtext[^"]+)"/);
+  if (baseUrlMatch) {
+    try {
+      const baseUrl = baseUrlMatch[1].replace(/\\u0026/g, '&');
+      console.log('[YouTube要約] baseUrlを直接抽出');
+      const transcriptResponse = await fetch(baseUrl);
+      const xml = await transcriptResponse.text();
+      return parseTranscriptXML(xml);
+    } catch (e) {
+      console.log('[YouTube要約] baseUrl取得失敗:', e.message);
     }
   }
 
@@ -685,23 +817,57 @@ async function extractCaptionsFromResponse(playerResponse) {
 
 // Fetch caption track and parse
 async function fetchCaptionTrack(captionTracks) {
-  // Prefer: Japanese > Auto-generated > First available
+  console.log(`[YouTube要約] 利用可能な字幕トラック: ${captionTracks.length}件`);
+  captionTracks.forEach((t, i) => {
+    console.log(`  ${i + 1}. ${t.languageCode} (${t.kind || 'manual'}) - ${t.name?.simpleText || t.name?.runs?.[0]?.text || 'unknown'}`);
+  });
+
+  // Priority order:
+  // 1. Japanese manual captions
+  // 2. Japanese auto-generated (asr)
+  // 3. Japanese-JP variant
+  // 4. English manual captions
+  // 5. English auto-generated
+  // 6. Any auto-generated captions
+  // 7. First available track
   let selectedTrack = captionTracks.find(t => t.languageCode === 'ja' && t.kind !== 'asr') ||
+                      captionTracks.find(t => t.languageCode === 'ja' && t.kind === 'asr') ||
                       captionTracks.find(t => t.languageCode === 'ja') ||
                       captionTracks.find(t => t.languageCode === 'ja-JP') ||
+                      captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr') ||
+                      captionTracks.find(t => t.languageCode === 'en' && t.kind === 'asr') ||
+                      captionTracks.find(t => t.languageCode?.startsWith('en')) ||
                       captionTracks.find(t => t.kind === 'asr') ||
                       captionTracks[0];
 
-  if (!selectedTrack || !selectedTrack.baseUrl) {
+  if (!selectedTrack) {
+    console.log('[YouTube要約] 適切な字幕トラックが見つかりません');
     return null;
   }
 
-  console.log(`[YouTube要約] 字幕言語: ${selectedTrack.languageCode}, 種類: ${selectedTrack.kind || 'manual'}`);
+  // Get baseUrl - handle escaped URLs
+  let baseUrl = selectedTrack.baseUrl;
+  if (!baseUrl) {
+    console.log('[YouTube要約] baseUrlがありません');
+    return null;
+  }
 
-  const response = await fetch(selectedTrack.baseUrl);
-  const xml = await response.text();
+  // Unescape URL if needed
+  baseUrl = baseUrl.replace(/\\u0026/g, '&');
 
-  return parseTranscriptXML(xml);
+  console.log(`[YouTube要約] 選択した字幕: ${selectedTrack.languageCode} (${selectedTrack.kind || 'manual'})`);
+
+  try {
+    const response = await fetch(baseUrl);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const xml = await response.text();
+    return parseTranscriptXML(xml);
+  } catch (e) {
+    console.log('[YouTube要約] 字幕取得エラー:', e.message);
+    return null;
+  }
 }
 
 // Parse YouTube's transcript XML format - returns array

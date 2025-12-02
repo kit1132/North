@@ -404,66 +404,16 @@ function extractTranscript() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  async function getTranscript() {
-    // Try to find ytInitialPlayerResponse
-    const scripts = document.querySelectorAll('script');
-    let playerResponse = null;
-
-    for (const script of scripts) {
-      const content = script.textContent || '';
-      const patterns = [
-        /ytInitialPlayerResponse\s*=\s*(\{.+?\});(?:\s*var|<\/script)/s,
-        /var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\});/s
-      ];
-
-      for (const pattern of patterns) {
-        const match = content.match(pattern);
-        if (match) {
-          try {
-            playerResponse = JSON.parse(match[1]);
-            break;
-          } catch (e) {
-            continue;
-          }
-        }
-      }
-      if (playerResponse) break;
-    }
-
-    if (!playerResponse) {
-      // Try window object
-      if (typeof ytInitialPlayerResponse !== 'undefined') {
-        playerResponse = ytInitialPlayerResponse;
-      }
-    }
-
-    if (!playerResponse) {
-      throw new Error('動画データが見つかりません');
-    }
-
-    const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-    if (!captions || captions.length === 0) {
-      throw new Error('この動画には字幕がありません');
-    }
-
-    // Select best track
-    let selectedTrack = captions.find(t => t.languageCode === 'ja' && t.kind !== 'asr') ||
-                        captions.find(t => t.languageCode === 'ja') ||
-                        captions.find(t => t.kind === 'asr') ||
-                        captions[0];
-
-    if (!selectedTrack?.baseUrl) {
-      throw new Error('字幕URLが見つかりません');
-    }
-
-    const response = await fetch(selectedTrack.baseUrl);
-    const xml = await response.text();
-
+  function parseTranscriptXML(xml) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(xml, 'text/xml');
     const textElements = doc.querySelectorAll('text');
 
     if (textElements.length === 0) {
+      const parseError = doc.querySelector('parsererror');
+      if (parseError) {
+        throw new Error('字幕データの形式が不正です');
+      }
       throw new Error('字幕データが空です');
     }
 
@@ -486,6 +436,118 @@ function extractTranscript() {
     });
 
     return transcriptParts;
+  }
+
+  async function fetchCaptionTrack(captionTracks) {
+    console.log('[YouTube要約] 利用可能な字幕トラック:', captionTracks.length);
+
+    // Priority order: Japanese manual > Japanese auto > English > Any auto > First
+    let selectedTrack = captionTracks.find(t => t.languageCode === 'ja' && t.kind !== 'asr') ||
+                        captionTracks.find(t => t.languageCode === 'ja' && t.kind === 'asr') ||
+                        captionTracks.find(t => t.languageCode === 'ja') ||
+                        captionTracks.find(t => t.languageCode === 'ja-JP') ||
+                        captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr') ||
+                        captionTracks.find(t => t.languageCode === 'en' && t.kind === 'asr') ||
+                        captionTracks.find(t => t.languageCode?.startsWith('en')) ||
+                        captionTracks.find(t => t.kind === 'asr') ||
+                        captionTracks[0];
+
+    if (!selectedTrack) {
+      throw new Error('適切な字幕トラックが見つかりません');
+    }
+
+    let baseUrl = selectedTrack.baseUrl;
+    if (!baseUrl) {
+      throw new Error('字幕URLがありません');
+    }
+
+    // Unescape URL if needed
+    baseUrl = baseUrl.replace(/\\u0026/g, '&');
+
+    console.log('[YouTube要約] 選択:', selectedTrack.languageCode, selectedTrack.kind || 'manual');
+
+    const response = await fetch(baseUrl);
+    if (!response.ok) {
+      throw new Error('字幕の取得に失敗しました');
+    }
+    const xml = await response.text();
+    return parseTranscriptXML(xml);
+  }
+
+  async function getTranscript() {
+    let captionTracks = null;
+
+    // Method 1: Extract captionTracks from script tags
+    const scripts = document.querySelectorAll('script');
+    for (const script of scripts) {
+      const content = script.textContent || '';
+      if (!content.includes('captionTracks')) continue;
+
+      // Try to extract captionTracks directly
+      const patterns = [
+        /"captionTracks":\s*(\[[\s\S]*?\])(?=,"audioTracks")/,
+        /"captionTracks":\s*(\[[\s\S]*?\])(?=,"translationLanguages")/,
+        /"captionTracks":\s*(\[[\s\S]*?\])(?=,"defaultAudioTrackIndex")/
+      ];
+
+      for (const pattern of patterns) {
+        const match = content.match(pattern);
+        if (match) {
+          try {
+            captionTracks = JSON.parse(match[1]);
+            if (captionTracks && captionTracks.length > 0) {
+              console.log('[YouTube要約] スクリプトからcaptionTracks抽出成功');
+              return await fetchCaptionTrack(captionTracks);
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+    }
+
+    // Method 2: Try window.ytInitialPlayerResponse
+    if (typeof ytInitialPlayerResponse !== 'undefined' && ytInitialPlayerResponse) {
+      captionTracks = ytInitialPlayerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (captionTracks && captionTracks.length > 0) {
+        console.log('[YouTube要約] ytInitialPlayerResponseから取得');
+        return await fetchCaptionTrack(captionTracks);
+      }
+    }
+
+    // Method 3: Try movie_player.getPlayerResponse()
+    const player = document.getElementById('movie_player');
+    if (player && player.getPlayerResponse) {
+      try {
+        const response = player.getPlayerResponse();
+        captionTracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+        if (captionTracks && captionTracks.length > 0) {
+          console.log('[YouTube要約] movie_playerから取得');
+          return await fetchCaptionTrack(captionTracks);
+        }
+      } catch (e) {
+        console.log('[YouTube要約] movie_player取得失敗:', e.message);
+      }
+    }
+
+    // Method 4: Try to find baseUrl directly
+    for (const script of scripts) {
+      const content = script.textContent || '';
+      const baseUrlMatch = content.match(/"baseUrl":\s*"(https:\/\/www\.youtube\.com\/api\/timedtext[^"]+)"/);
+      if (baseUrlMatch) {
+        try {
+          const baseUrl = baseUrlMatch[1].replace(/\\u0026/g, '&');
+          console.log('[YouTube要約] baseUrl直接抽出');
+          const response = await fetch(baseUrl);
+          const xml = await response.text();
+          return parseTranscriptXML(xml);
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+
+    throw new Error('この動画には字幕がありません。字幕が有効になっているか確認してください。');
   }
 
   return getTranscript()
