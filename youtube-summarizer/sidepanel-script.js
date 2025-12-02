@@ -279,7 +279,8 @@ async function summarize() {
 
     const response = await chrome.runtime.sendMessage({
       action: 'summarize',
-      transcript: transcript
+      transcript: transcript,
+      videoId: currentVideoId
     });
 
     if (!response || !response.success) {
@@ -330,8 +331,68 @@ function updateSummaryUI(state) {
   }
 
   if (state === 'success') {
-    summaryContentEl.innerHTML = parseMarkdown(currentSummary);
+    // Parse markdown and add AI web link section
+    let summaryHtml = parseMarkdown(currentSummary);
+
+    // Add AI web link section at the end
+    summaryHtml += `
+      <div class="ai-web-link-section">
+        <hr style="margin: 16px 0; border: none; border-top: 1px solid #e5e7eb;">
+        <p style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">
+          💡 要約内容をAIに質問して深掘りできます
+        </p>
+        <button id="open-ai-web-btn" class="ai-web-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+          <span>AIで深掘りする</span>
+        </button>
+        <p style="font-size: 11px; color: #9ca3af; margin-top: 6px;">
+          クリックするとAIのWeb版が開き、要約がクリップボードにコピーされます。<br>
+          ペーストして質問を追加してください。
+        </p>
+      </div>
+    `;
+
+    summaryContentEl.innerHTML = summaryHtml;
+
+    // Add event listener for AI web link button
+    document.getElementById('open-ai-web-btn')?.addEventListener('click', openAIWebWithSummary);
   }
+}
+
+// Open AI web interface with summary copied to clipboard
+async function openAIWebWithSummary() {
+  try {
+    // Copy summary to clipboard first
+    await navigator.clipboard.writeText(currentSummary);
+
+    // Get the AI web URL based on provider
+    const response = await chrome.runtime.sendMessage({ action: 'getAIWebUrl' });
+
+    if (response?.url) {
+      // Open the AI web interface in a new tab
+      chrome.tabs.create({ url: response.url });
+      showNotification(`要約をコピーしました。${getProviderName(response.provider)}で貼り付けてください。`);
+    } else {
+      showNotification('AIのURLを取得できませんでした');
+    }
+  } catch (error) {
+    console.error('Error opening AI web:', error);
+    showNotification('エラーが発生しました');
+  }
+}
+
+// Get provider display name
+function getProviderName(provider) {
+  const names = {
+    claude: 'Claude',
+    openai: 'ChatGPT',
+    gemini: 'Gemini'
+  };
+  return names[provider] || 'AI';
 }
 
 // Copy summary

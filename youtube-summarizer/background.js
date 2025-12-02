@@ -3,6 +3,17 @@
 
 const MAX_TOKENS = 4096;
 
+// Cache for summaries (videoId -> summary)
+const summaryCache = new Map();
+const CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes
+
+// AI Web URLs for each provider
+const AI_WEB_URLS = {
+  claude: 'https://claude.ai/new',
+  openai: 'https://chat.openai.com/',
+  gemini: 'https://gemini.google.com/'
+};
+
 // Open side panel when extension icon is clicked
 chrome.action.onClicked.addListener(async (tab) => {
   await chrome.sidePanel.open({ tabId: tab.id });
@@ -48,8 +59,8 @@ const SUMMARY_PROMPT = `あなたはYouTube動画の要約アシスタントで�
 
 ## 出力フォーマット（必ずこの形式で）
 
-### 結論（200文字以内）
-[動画の核心を簡潔に]
+### 結論（300-500文字）
+[動画の核心を詳しく説明。視聴者が何を学べるか、なぜ重要かを含める]
 
 ### タイムライン要約
 | 時間 | トピック | 要点 |
@@ -70,7 +81,8 @@ const SUMMARY_PROMPT = `あなたはYouTube動画の要約アシスタントで�
 
 ### 関連する問い
 この内容を深めるための問いかけ：
-- [考えるべき問い]
+- [考えるべき問い1]
+- [考えるべき問い2]
 
 ---
 
@@ -79,6 +91,7 @@ const SUMMARY_PROMPT = `あなたはYouTube動画の要約アシスタントで�
 - 抽象的な表現を避け、具体的に書く
 - 長すぎる説明は避け、要点を明確に
 - 表はマークダウン形式で出力
+- 結論は必ず300-500文字で詳しく書く
 
 ## トランスクリプト：
 `;
@@ -86,7 +99,7 @@ const SUMMARY_PROMPT = `あなたはYouTube動画の要約アシスタントで�
 // Listen for messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'summarize') {
-    handleSummarize(request.transcript)
+    handleSummarize(request.transcript, request.videoId)
       .then(summary => {
         sendResponse({ success: true, summary });
       })
@@ -106,12 +119,39 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     return true;
   }
+
+  if (request.action === 'getAIWebUrl') {
+    chrome.storage.sync.get(['apiProvider'], (result) => {
+      const provider = result.apiProvider || 'claude';
+      sendResponse({ url: AI_WEB_URLS[provider], provider });
+    });
+    return true;
+  }
+
+  if (request.action === 'getCachedSummary') {
+    const cached = summaryCache.get(request.videoId);
+    if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
+      sendResponse({ success: true, summary: cached.summary });
+    } else {
+      sendResponse({ success: false });
+    }
+    return true;
+  }
 });
 
 // Handle summarization request
-async function handleSummarize(transcript) {
+async function handleSummarize(transcript, videoId) {
   if (!transcript) {
     throw new Error('トランスクリプトがありません');
+  }
+
+  // Check cache first
+  if (videoId) {
+    const cached = summaryCache.get(videoId);
+    if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
+      console.log('[YouTube要約] キャッシュから要約を取得');
+      return cached.summary;
+    }
   }
 
   // Get settings from storage
@@ -123,19 +163,40 @@ async function handleSummarize(transcript) {
     throw new Error('APIキーが設定されていません');
   }
 
-  const fullPrompt = SUMMARY_PROMPT + transcript;
+  // Truncate transcript if too long to save API costs
+  const maxTranscriptLength = 50000;
+  let truncatedTranscript = transcript;
+  if (transcript.length > maxTranscriptLength) {
+    truncatedTranscript = transcript.substring(0, maxTranscriptLength) + '\n\n[注: トランスクリプトが長いため省略]';
+  }
+
+  const fullPrompt = SUMMARY_PROMPT + truncatedTranscript;
 
   // Call appropriate API
+  let summary;
   switch (provider) {
     case 'claude':
-      return await callClaudeAPI(fullPrompt, apiKey);
+      summary = await callClaudeAPI(fullPrompt, apiKey);
+      break;
     case 'openai':
-      return await callOpenAIAPI(fullPrompt, apiKey);
+      summary = await callOpenAIAPI(fullPrompt, apiKey);
+      break;
     case 'gemini':
-      return await callGeminiAPI(fullPrompt, apiKey);
+      summary = await callGeminiAPI(fullPrompt, apiKey);
+      break;
     default:
       throw new Error('不明なAPIプロバイダーです');
   }
+
+  // Cache the result
+  if (videoId) {
+    summaryCache.set(videoId, {
+      summary,
+      timestamp: Date.now()
+    });
+  }
+
+  return summary;
 }
 
 // Verify API key
