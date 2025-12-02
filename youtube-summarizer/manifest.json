@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "YouTube要約",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "YouTubeの動画トランスクリプトをAI（Claude/OpenAI/Gemini）で要約するChrome拡張機能",
   "permissions": [
     "activeTab",
     "storage",
     "scripting",
-    "clipboardWrite"
+    "clipboardWrite",
+    "sidePanel",
+    "tabs"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
@@ -16,12 +18,14 @@
     "https://generativelanguage.googleapis.com/*"
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "options_page": "options.html",
   "background": {
@@ -30,8 +34,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
-      "css": ["sidepanel.css"]
+      "js": ["content.js"]
     }
   ],
   "icons": {

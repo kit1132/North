@@ -1,0 +1,494 @@
+// Side Panel Script for YouTube Summarizer
+
+let transcriptData = [];
+let currentSummary = '';
+let currentTabId = null;
+
+// DOM Elements
+const notYoutubeEl = document.getElementById('not-youtube');
+const mainContentEl = document.getElementById('main-content');
+const videoInfoEl = document.getElementById('video-info');
+const videoTitleEl = document.getElementById('video-title');
+const transcriptListEl = document.getElementById('transcript-list');
+const summaryContentEl = document.getElementById('summary-content');
+const notificationEl = document.getElementById('notification');
+
+// Initialize
+document.addEventListener('DOMContentLoaded', async () => {
+  setupEventListeners();
+  await checkCurrentTab();
+
+  // Listen for tab updates
+  chrome.tabs.onActivated.addListener(checkCurrentTab);
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.status === 'complete') {
+      checkCurrentTab();
+    }
+  });
+});
+
+// Setup event listeners
+function setupEventListeners() {
+  // Settings button
+  document.getElementById('settings-btn').addEventListener('click', () => {
+    chrome.runtime.openOptionsPage();
+  });
+
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+
+  // Load transcript button
+  document.getElementById('load-btn').addEventListener('click', loadTranscript);
+
+  // Copy transcript button
+  document.getElementById('copy-transcript-btn').addEventListener('click', copyTranscript);
+
+  // Summarize button
+  document.getElementById('summarize-btn').addEventListener('click', summarize);
+
+  // Copy summary button
+  document.getElementById('copy-summary-btn').addEventListener('click', copySummary);
+}
+
+// Check if current tab is YouTube
+async function checkCurrentTab() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    currentTabId = tab?.id;
+
+    if (tab?.url?.includes('youtube.com/watch')) {
+      notYoutubeEl.style.display = 'none';
+      mainContentEl.style.display = 'flex';
+
+      // Get video title
+      const title = await getVideoTitle(tab.id);
+      if (title) {
+        videoTitleEl.textContent = title;
+        videoInfoEl.style.display = 'block';
+      }
+
+      // Reset data for new video
+      const videoId = new URL(tab.url).searchParams.get('v');
+      if (videoId !== currentVideoId) {
+        currentVideoId = videoId;
+        transcriptData = [];
+        currentSummary = '';
+        updateTranscriptUI();
+        updateSummaryUI('empty');
+      }
+    } else {
+      notYoutubeEl.style.display = 'flex';
+      mainContentEl.style.display = 'none';
+    }
+  } catch (error) {
+    console.error('Error checking tab:', error);
+  }
+}
+
+let currentVideoId = null;
+
+// Get video title from page
+async function getVideoTitle(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const titleEl = document.querySelector('h1.ytd-video-primary-info-renderer, h1.ytd-watch-metadata');
+        return titleEl?.textContent?.trim() || document.title.replace(' - YouTube', '');
+      }
+    });
+    return results[0]?.result;
+  } catch (error) {
+    console.error('Error getting title:', error);
+    return null;
+  }
+}
+
+// Switch tabs
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tab-content').forEach(content => {
+    content.classList.toggle('active', content.id === `${tabName}-tab`);
+  });
+}
+
+// Load transcript from content script
+async function loadTranscript() {
+  const loadBtn = document.getElementById('load-btn');
+  loadBtn.disabled = true;
+
+  transcriptListEl.innerHTML = `
+    <div class="loading">
+      <div class="spinner"></div>
+      <span class="loading-text">トランスクリプトを読み込み中...</span>
+    </div>
+  `;
+
+  try {
+    if (!currentTabId) {
+      throw new Error('タブが見つかりません');
+    }
+
+    // Execute transcript extraction in content script
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: currentTabId },
+      func: extractTranscript
+    });
+
+    const result = results[0]?.result;
+    if (!result || !result.success) {
+      throw new Error(result?.error || 'トランスクリプトの取得に失敗しました');
+    }
+
+    transcriptData = result.data;
+    updateTranscriptUI();
+
+  } catch (error) {
+    transcriptListEl.innerHTML = `
+      <div class="error">
+        <div class="error-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <p class="error-message">${error.message}</p>
+      </div>
+    `;
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+// Update transcript UI
+function updateTranscriptUI() {
+  if (transcriptData.length === 0) {
+    transcriptListEl.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+        </div>
+        <p class="empty-text">「読み込む」をクリックして<br>トランスクリプトを取得</p>
+      </div>
+    `;
+    return;
+  }
+
+  transcriptListEl.innerHTML = transcriptData.map((item, index) => `
+    <div class="transcript-item" data-index="${index}" data-time="${item.seconds}">
+      <span class="transcript-time">${item.time}</span>
+      <span class="transcript-text">${escapeHtml(item.text)}</span>
+    </div>
+  `).join('');
+
+  // Add click event to seek video
+  transcriptListEl.querySelectorAll('.transcript-item').forEach(item => {
+    item.addEventListener('click', async () => {
+      const time = parseFloat(item.dataset.time);
+      await seekVideo(time);
+
+      transcriptListEl.querySelectorAll('.transcript-item').forEach(el => {
+        el.classList.remove('active');
+      });
+      item.classList.add('active');
+    });
+  });
+}
+
+// Seek video to time
+async function seekVideo(seconds) {
+  if (!currentTabId) return;
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: currentTabId },
+      func: (time) => {
+        const video = document.querySelector('video');
+        if (video) video.currentTime = time;
+      },
+      args: [seconds]
+    });
+  } catch (error) {
+    console.error('Error seeking video:', error);
+  }
+}
+
+// Copy transcript
+async function copyTranscript() {
+  if (transcriptData.length === 0) {
+    showNotification('トランスクリプトがありません');
+    return;
+  }
+
+  const text = transcriptData.map(item => `[${item.time}] ${item.text}`).join('\n');
+
+  try {
+    await navigator.clipboard.writeText(text);
+    showNotification('トランスクリプトをコピーしました');
+  } catch (error) {
+    showNotification('コピーに失敗しました');
+  }
+}
+
+// Summarize
+async function summarize() {
+  const summarizeBtn = document.getElementById('summarize-btn');
+
+  // Check if transcript is loaded
+  if (transcriptData.length === 0) {
+    await loadTranscript();
+    if (transcriptData.length === 0) return;
+  }
+
+  // Check API key
+  const settings = await chrome.storage.sync.get(['apiKey', 'apiProvider']);
+  if (!settings.apiKey) {
+    summaryContentEl.innerHTML = `
+      <div class="error">
+        <div class="error-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <p class="error-message">APIキーが設定されていません<br>設定画面から設定してください</p>
+      </div>
+    `;
+    return;
+  }
+
+  summarizeBtn.disabled = true;
+  summaryContentEl.innerHTML = `
+    <div class="loading">
+      <div class="spinner"></div>
+      <span class="loading-text">要約を生成中...</span>
+    </div>
+  `;
+
+  try {
+    const transcript = transcriptData.map(item => `[${item.time}] ${item.text}`).join('\n');
+
+    const response = await chrome.runtime.sendMessage({
+      action: 'summarize',
+      transcript: transcript
+    });
+
+    if (!response || !response.success) {
+      throw new Error(response?.error || '要約の生成に失敗しました');
+    }
+
+    currentSummary = response.summary;
+    updateSummaryUI('success');
+
+    // Auto copy
+    await navigator.clipboard.writeText(currentSummary);
+    showNotification('要約をクリップボードにコピーしました');
+
+  } catch (error) {
+    summaryContentEl.innerHTML = `
+      <div class="error">
+        <div class="error-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <p class="error-message">${error.message}</p>
+      </div>
+    `;
+  } finally {
+    summarizeBtn.disabled = false;
+  }
+}
+
+// Update summary UI
+function updateSummaryUI(state) {
+  if (state === 'empty' || !currentSummary) {
+    summaryContentEl.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 20V10"></path>
+            <path d="M18 20V4"></path>
+            <path d="M6 20v-4"></path>
+          </svg>
+        </div>
+        <p class="empty-text">「要約する」をクリックして<br>AIで要約を生成</p>
+      </div>
+    `;
+    return;
+  }
+
+  if (state === 'success') {
+    summaryContentEl.innerHTML = parseMarkdown(currentSummary);
+  }
+}
+
+// Copy summary
+async function copySummary() {
+  if (!currentSummary) {
+    showNotification('要約がありません');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(currentSummary);
+    showNotification('要約をコピーしました');
+  } catch (error) {
+    showNotification('コピーに失敗しました');
+  }
+}
+
+// Show notification
+function showNotification(message) {
+  notificationEl.textContent = message;
+  notificationEl.classList.add('show');
+  setTimeout(() => {
+    notificationEl.classList.remove('show');
+  }, 2000);
+}
+
+// Parse markdown to HTML
+function parseMarkdown(text) {
+  let html = text;
+
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  const tableRegex = /\|(.+)\|\n\|[-|\s]+\|\n((?:\|.+\|\n?)+)/g;
+  html = html.replace(tableRegex, (match, header, rows) => {
+    const headers = header.split('|').filter(h => h.trim()).map(h => `<th>${h.trim()}</th>`).join('');
+    const rowsHtml = rows.trim().split('\n').map(row => {
+      const cells = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    return `<table><thead><tr>${headers}</tr></thead><tbody>${rowsHtml}</tbody></table>`;
+  });
+
+  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.+<\/li>\n?)+/g, '<ul>$&</ul>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/\n\n/g, '</p><p>');
+  html = html.replace(/\n/g, '<br>');
+  html = html.replace(/<\/ul>\s*<ul>/g, '');
+  html = html.replace(/<br><li>/g, '<li>');
+  html = html.replace(/<\/li><br>/g, '</li>');
+
+  return `<p>${html}</p>`;
+}
+
+// Escape HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ===== Transcript Extraction Function (injected into page) =====
+function extractTranscript() {
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  async function getTranscript() {
+    // Try to find ytInitialPlayerResponse
+    const scripts = document.querySelectorAll('script');
+    let playerResponse = null;
+
+    for (const script of scripts) {
+      const content = script.textContent || '';
+      const patterns = [
+        /ytInitialPlayerResponse\s*=\s*(\{.+?\});(?:\s*var|<\/script)/s,
+        /var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\});/s
+      ];
+
+      for (const pattern of patterns) {
+        const match = content.match(pattern);
+        if (match) {
+          try {
+            playerResponse = JSON.parse(match[1]);
+            break;
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+      if (playerResponse) break;
+    }
+
+    if (!playerResponse) {
+      // Try window object
+      if (typeof ytInitialPlayerResponse !== 'undefined') {
+        playerResponse = ytInitialPlayerResponse;
+      }
+    }
+
+    if (!playerResponse) {
+      throw new Error('動画データが見つかりません');
+    }
+
+    const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    if (!captions || captions.length === 0) {
+      throw new Error('この動画には字幕がありません');
+    }
+
+    // Select best track
+    let selectedTrack = captions.find(t => t.languageCode === 'ja' && t.kind !== 'asr') ||
+                        captions.find(t => t.languageCode === 'ja') ||
+                        captions.find(t => t.kind === 'asr') ||
+                        captions[0];
+
+    if (!selectedTrack?.baseUrl) {
+      throw new Error('字幕URLが見つかりません');
+    }
+
+    const response = await fetch(selectedTrack.baseUrl);
+    const xml = await response.text();
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xml, 'text/xml');
+    const textElements = doc.querySelectorAll('text');
+
+    if (textElements.length === 0) {
+      throw new Error('字幕データが空です');
+    }
+
+    const transcriptParts = [];
+    textElements.forEach((element) => {
+      const start = parseFloat(element.getAttribute('start') || '0');
+      let text = element.textContent || '';
+
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = text;
+      text = textarea.value.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+      if (text) {
+        transcriptParts.push({
+          time: formatTime(start),
+          seconds: start,
+          text: text
+        });
+      }
+    });
+
+    return transcriptParts;
+  }
+
+  return getTranscript()
+    .then(data => ({ success: true, data }))
+    .catch(error => ({ success: false, error: error.message }));
+}

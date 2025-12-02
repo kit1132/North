@@ -1,7 +1,30 @@
 // Background Service Worker for YouTube Summarizer
-// Handles multiple AI API communication
+// Handles multiple AI API communication and side panel
 
 const MAX_TOKENS = 4096;
+
+// Open side panel when extension icon is clicked
+chrome.action.onClicked.addListener(async (tab) => {
+  await chrome.sidePanel.open({ tabId: tab.id });
+});
+
+// Enable side panel for YouTube
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url) {
+    if (tab.url.includes('youtube.com')) {
+      await chrome.sidePanel.setOptions({
+        tabId,
+        path: 'sidepanel.html',
+        enabled: true
+      });
+    } else {
+      await chrome.sidePanel.setOptions({
+        tabId,
+        enabled: true
+      });
+    }
+  }
+});
 
 // API configurations
 const API_CONFIGS = {
