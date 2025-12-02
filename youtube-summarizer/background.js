@@ -53,8 +53,9 @@ const API_CONFIGS = {
   }
 };
 
-// Summary prompt template
-const SUMMARY_PROMPT = `You are a YouTube video summary assistant.
+// Summary prompt templates for each language
+const SUMMARY_PROMPTS = {
+  en: `You are a YouTube video summary assistant.
 Please summarize the following transcript.
 
 ## Output Format (use this format exactly)
@@ -93,12 +94,74 @@ Questions to explore this topic further:
 - Conclusion must be 300-500 characters with detail
 
 ## Transcript:
-`;
+`,
+
+  ja: `あなたはYouTube動画の要約アシスタントです。
+以下の字幕内容を要約してください。
+
+## 出力形式（この形式に従ってください）
+
+### 結論（300-500文字）
+[核心的なメッセージを詳しく説明。視聴者が学べることと重要性を含める]
+
+### タイムライン要約
+| 時間 | トピック | 要点 |
+|------|----------|------|
+| 0:00 | [トピック名] | [1-2文の要約] |
+| X:XX | [トピック名] | [1-2文の要約] |
+（主要なセクションを含める）
+
+### 重要ポイント（3-5個）
+- [具体的なポイント1]
+- [具体的なポイント2]
+- [具体的なポイント3]
+
+### アクションアイテム
+この動画からの具体的なアクション：
+1. [すぐにできること]
+2. [次のステップ]
+
+### 関連する質問
+このトピックをさらに探るための質問：
+- [考えるべき質問1]
+- [考えるべき質問2]
+
+---
+
+## ルール
+- 抽象的な表現を避け、具体的に書く
+- 説明は簡潔に、要点を明確に
+- テーブルはマークダウン形式で出力
+- 結論は300-500文字で詳細に
+
+## 字幕内容：
+`
+};
+
+// Get system language
+function getSystemLanguage() {
+  // In service worker, we can't access navigator.language directly
+  // Default to English if system can't be detected
+  return 'en';
+}
+
+// Resolve language setting
+function resolveLanguage(setting) {
+  if (setting === 'system') {
+    return getSystemLanguage();
+  }
+  return setting || 'en';
+}
+
+// Get summary prompt for language
+function getSummaryPrompt(lang) {
+  return SUMMARY_PROMPTS[lang] || SUMMARY_PROMPTS.en;
+}
 
 // Listen for messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'summarize') {
-    handleSummarize(request.transcript, request.videoId)
+    handleSummarize(request.transcript, request.videoId, request.language)
       .then(summary => {
         sendResponse({ success: true, summary });
       })
@@ -139,7 +202,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Handle summarization request
-async function handleSummarize(transcript, videoId) {
+async function handleSummarize(transcript, videoId, language) {
   if (!transcript) {
     throw new Error('No transcript available');
   }
@@ -154,9 +217,15 @@ async function handleSummarize(transcript, videoId) {
   }
 
   // Get settings from storage
-  const settings = await chrome.storage.sync.get(['apiProvider', 'apiKey']);
+  const settings = await chrome.storage.sync.get(['apiProvider', 'apiKey', 'language']);
   const provider = settings.apiProvider || 'claude';
   const apiKey = settings.apiKey;
+
+  // Determine language for prompt
+  let lang = language;
+  if (!lang) {
+    lang = resolveLanguage(settings.language || 'system');
+  }
 
   if (!apiKey) {
     throw new Error('API key not set');
@@ -166,10 +235,14 @@ async function handleSummarize(transcript, videoId) {
   const maxTranscriptLength = 50000;
   let truncatedTranscript = transcript;
   if (transcript.length > maxTranscriptLength) {
-    truncatedTranscript = transcript.substring(0, maxTranscriptLength) + '\n\n[Note: Transcript truncated due to length]';
+    const truncationNote = lang === 'ja'
+      ? '\n\n[注: 長さの制限のため字幕を切り詰めました]'
+      : '\n\n[Note: Transcript truncated due to length]';
+    truncatedTranscript = transcript.substring(0, maxTranscriptLength) + truncationNote;
   }
 
-  const fullPrompt = SUMMARY_PROMPT + truncatedTranscript;
+  const summaryPrompt = getSummaryPrompt(lang);
+  const fullPrompt = summaryPrompt + truncatedTranscript;
 
   // Call appropriate API
   let summary;

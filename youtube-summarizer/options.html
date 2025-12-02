@@ -288,31 +288,40 @@
   <div class="container">
     <h1>
       <div class="logo">Y</div>
-      YouTube Summary - Settings
+      <span id="options-title">YouTube Summary - Settings</span>
     </h1>
-    <p class="subtitle">Summarize videos using AI</p>
+    <p class="subtitle" id="options-subtitle">Summarize videos using AI</p>
 
     <form id="options-form">
       <div class="form-group">
-        <label for="theme-mode">Theme Mode</label>
-        <select id="theme-mode">
+        <label for="language" id="label-language">Language</label>
+        <select id="language">
           <option value="system">Follow System</option>
-          <option value="light">Light Mode</option>
-          <option value="dark">Dark Mode</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="api-provider">AI Provider</label>
+        <label for="theme-mode" id="label-theme-mode">Theme Mode</label>
+        <select id="theme-mode">
+          <option value="system" id="theme-system">Follow System</option>
+          <option value="light" id="theme-light">Light Mode</option>
+          <option value="dark" id="theme-dark">Dark Mode</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="api-provider" id="label-api-provider">AI Provider</label>
         <select id="api-provider">
-          <option value="claude">Claude (Anthropic)</option>
-          <option value="openai">ChatGPT (OpenAI)</option>
-          <option value="gemini">Gemini (Google)</option>
+          <option value="claude" id="provider-claude">Claude (Anthropic)</option>
+          <option value="openai" id="provider-openai">ChatGPT (OpenAI)</option>
+          <option value="gemini" id="provider-gemini">Gemini (Google)</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="api-key">API Key</label>
+        <label for="api-key" id="label-api-key">API Key</label>
         <div class="input-wrapper">
           <input type="password" id="api-key" placeholder="Enter API key..." autocomplete="off">
           <button type="button" class="toggle-visibility" id="toggle-key">
@@ -339,7 +348,7 @@
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
             <polyline points="22 4 12 14.01 9 11.01"></polyline>
           </svg>
-          Verify
+          <span id="verify-btn-text">Verify</span>
         </button>
         <button type="submit" class="btn btn-primary" id="save-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -347,7 +356,7 @@
             <polyline points="17 21 17 13 7 13 7 21"></polyline>
             <polyline points="7 3 7 8 15 8"></polyline>
           </svg>
-          Save & Close
+          <span id="save-btn-text">Save & Close</span>
         </button>
       </div>
     </form>
@@ -355,6 +364,7 @@
 
   <div id="notification" class="notification"></div>
 
+  <script src="locales.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

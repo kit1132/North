@@ -3,6 +3,7 @@
 let transcriptData = [];
 let currentSummary = '';
 let currentTabId = null;
+let currentLang = 'en';
 
 // Theme Management
 async function initTheme() {
@@ -40,15 +41,78 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', asy
   }
 });
 
-// Listen for theme changes from settings
+// Listen for theme and language changes from settings
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === 'sync' && changes.themeMode) {
-    applyTheme(changes.themeMode.newValue || 'system');
+  if (namespace === 'sync') {
+    if (changes.themeMode) {
+      applyTheme(changes.themeMode.newValue || 'system');
+    }
+    if (changes.language) {
+      currentLang = resolveLanguage(changes.language.newValue || 'system');
+      applyTranslations();
+    }
   }
 });
 
 // Initialize theme immediately
 initTheme();
+
+// Language Management
+async function initLanguage() {
+  try {
+    const result = await chrome.storage.sync.get(['language']);
+    if (result.language) {
+      currentLang = resolveLanguage(result.language);
+    } else {
+      currentLang = getSystemLanguage();
+    }
+    applyTranslations();
+  } catch (error) {
+    console.error('Failed to load language:', error);
+    currentLang = 'en';
+    applyTranslations();
+  }
+}
+
+// Apply translations to the sidepanel
+function applyTranslations() {
+  // Header
+  const headerTitle = document.getElementById('header-title');
+  if (headerTitle) headerTitle.textContent = t('extensionName', currentLang);
+
+  // Settings button title
+  const settingsBtn = document.getElementById('settings-btn');
+  if (settingsBtn) settingsBtn.title = t('settings', currentLang);
+
+  // Not YouTube message
+  const notYoutubeText = document.getElementById('not-youtube-text');
+  if (notYoutubeText) notYoutubeText.textContent = t('notYoutube', currentLang);
+
+  // Tabs
+  const tabTranscript = document.getElementById('tab-transcript');
+  if (tabTranscript) tabTranscript.textContent = t('tabTranscript', currentLang);
+  const tabSummary = document.getElementById('tab-summary');
+  if (tabSummary) tabSummary.textContent = t('tabSummary', currentLang);
+
+  // Buttons
+  const loadBtnText = document.getElementById('load-btn-text');
+  if (loadBtnText) loadBtnText.textContent = t('btnLoad', currentLang);
+  const copyTranscriptBtnText = document.getElementById('copy-transcript-btn-text');
+  if (copyTranscriptBtnText) copyTranscriptBtnText.textContent = t('btnCopy', currentLang);
+  const summarizeBtnText = document.getElementById('summarize-btn-text');
+  if (summarizeBtnText) summarizeBtnText.textContent = t('btnSummarize', currentLang);
+  const copySummaryBtnText = document.getElementById('copy-summary-btn-text');
+  if (copySummaryBtnText) copySummaryBtnText.textContent = t('btnCopy', currentLang);
+
+  // Update empty states if currently showing
+  updateTranscriptUI();
+  if (!currentSummary) {
+    updateSummaryUI('empty');
+  }
+}
+
+// Initialize language immediately
+initLanguage();
 
 // DOM Elements
 const notYoutubeEl = document.getElementById('not-youtube');
@@ -170,13 +234,13 @@ async function loadTranscript() {
   transcriptListEl.innerHTML = `
     <div class="loading">
       <div class="spinner"></div>
-      <span class="loading-text">Loading transcript...</span>
+      <span class="loading-text">${t('loadingTranscript', currentLang)}</span>
     </div>
   `;
 
   try {
     if (!currentTabId) {
-      throw new Error('Tab not found');
+      throw new Error(t('tabNotFound', currentLang));
     }
 
     // Execute transcript extraction in content script
@@ -187,7 +251,7 @@ async function loadTranscript() {
 
     const result = results[0]?.result;
     if (!result || !result.success) {
-      throw new Error(result?.error || 'Failed to get transcript');
+      throw new Error(result?.error || t('failedToGetTranscript', currentLang));
     }
 
     transcriptData = result.data;
@@ -222,7 +286,7 @@ function updateTranscriptUI() {
             <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
         </div>
-        <p class="empty-text">Click "Load" to<br>get the transcript</p>
+        <p class="empty-text">${t('emptyTranscript', currentLang)}</p>
       </div>
     `;
     return;
@@ -270,7 +334,7 @@ async function seekVideo(seconds) {
 // Copy transcript
 async function copyTranscript() {
   if (transcriptData.length === 0) {
-    showNotification('No transcript available');
+    showNotification(t('noTranscript', currentLang));
     return;
   }
 
@@ -278,9 +342,9 @@ async function copyTranscript() {
 
   try {
     await navigator.clipboard.writeText(text);
-    showNotification('Transcript copied to clipboard');
+    showNotification(t('transcriptCopied', currentLang));
   } catch (error) {
-    showNotification('Failed to copy');
+    showNotification(t('failedToCopy', currentLang));
   }
 }
 
@@ -295,7 +359,7 @@ async function summarize() {
   }
 
   // Check API key
-  const settings = await chrome.storage.sync.get(['apiKey', 'apiProvider']);
+  const settings = await chrome.storage.sync.get(['apiKey', 'apiProvider', 'language']);
   if (!settings.apiKey) {
     summaryContentEl.innerHTML = `
       <div class="error">
@@ -306,7 +370,7 @@ async function summarize() {
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
-        <p class="error-message">API key not set<br>Please configure in settings</p>
+        <p class="error-message">${t('apiKeyNotSet', currentLang)}</p>
       </div>
     `;
     return;
@@ -316,21 +380,23 @@ async function summarize() {
   summaryContentEl.innerHTML = `
     <div class="loading">
       <div class="spinner"></div>
-      <span class="loading-text">Generating summary...</span>
+      <span class="loading-text">${t('loadingSummary', currentLang)}</span>
     </div>
   `;
 
   try {
     const transcript = transcriptData.map(item => `[${item.time}] ${item.text}`).join('\n');
 
+    // Send language preference for summary prompt
     const response = await chrome.runtime.sendMessage({
       action: 'summarize',
       transcript: transcript,
-      videoId: currentVideoId
+      videoId: currentVideoId,
+      language: currentLang
     });
 
     if (!response || !response.success) {
-      throw new Error(response?.error || 'Failed to generate summary');
+      throw new Error(response?.error || t('failedToGenerateSummary', currentLang));
     }
 
     currentSummary = response.summary;
@@ -338,7 +404,7 @@ async function summarize() {
 
     // Auto copy
     await navigator.clipboard.writeText(currentSummary);
-    showNotification('Summary copied to clipboard');
+    showNotification(t('summaryCopied', currentLang));
 
   } catch (error) {
     summaryContentEl.innerHTML = `
@@ -370,7 +436,7 @@ function updateSummaryUI(state) {
             <path d="M6 20v-4"></path>
           </svg>
         </div>
-        <p class="empty-text">Click "Summarize" to<br>generate AI summary</p>
+        <p class="empty-text">${t('emptySummary', currentLang)}</p>
       </div>
     `;
     return;
@@ -385,7 +451,7 @@ function updateSummaryUI(state) {
       <div class="ai-web-link-section">
         <hr style="margin: 16px 0; border: none; border-top: 1px solid #e5e7eb;">
         <p style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">
-          💡 Ask AI to explore this summary further
+          💡 ${t('aiWebLinkHint', currentLang)}
         </p>
         <button id="open-ai-web-btn" class="ai-web-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -393,11 +459,10 @@ function updateSummaryUI(state) {
             <polyline points="15 3 21 3 21 9"></polyline>
             <line x1="10" y1="14" x2="21" y2="3"></line>
           </svg>
-          <span>Explore with AI</span>
+          <span>${t('aiWebLinkBtn', currentLang)}</span>
         </button>
         <p style="font-size: 11px; color: #9ca3af; margin-top: 6px;">
-          Opens AI web interface and copies summary to clipboard.<br>
-          Paste and add your questions.
+          ${t('aiWebLinkDesc', currentLang)}
         </p>
       </div>
     `;
@@ -421,13 +486,13 @@ async function openAIWebWithSummary() {
     if (response?.url) {
       // Open the AI web interface in a new tab
       chrome.tabs.create({ url: response.url });
-      showNotification(`Summary copied. Paste in ${getProviderName(response.provider)}.`);
+      showNotification(`${t('summaryCopiedPaste', currentLang)} ${getProviderName(response.provider)}`);
     } else {
-      showNotification('Could not get AI URL');
+      showNotification(t('couldNotGetUrl', currentLang));
     }
   } catch (error) {
     console.error('Error opening AI web:', error);
-    showNotification('An error occurred');
+    showNotification(t('errorOccurred', currentLang));
   }
 }
 
@@ -444,15 +509,15 @@ function getProviderName(provider) {
 // Copy summary
 async function copySummary() {
   if (!currentSummary) {
-    showNotification('No summary available');
+    showNotification(t('noSummary', currentLang));
     return;
   }
 
   try {
     await navigator.clipboard.writeText(currentSummary);
-    showNotification('Summary copied');
+    showNotification(t('summaryCopied', currentLang));
   } catch (error) {
-    showNotification('Failed to copy');
+    showNotification(t('failedToCopy', currentLang));
   }
 }
 

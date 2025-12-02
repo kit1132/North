@@ -1,5 +1,6 @@
 // DOM elements
 const form = document.getElementById('options-form');
+const languageSelect = document.getElementById('language');
 const themeModeSelect = document.getElementById('theme-mode');
 const apiProviderSelect = document.getElementById('api-provider');
 const apiKeyInput = document.getElementById('api-key');
@@ -12,38 +13,57 @@ const apiHint = document.getElementById('api-hint');
 const apiLink = document.getElementById('api-link');
 const apiInfo = document.getElementById('api-info');
 
-// API provider configurations
+// Current language
+let currentLang = 'en';
+
+// API provider configurations (base - translations are applied dynamically)
 const API_CONFIGS = {
   claude: {
     name: 'Claude',
     placeholder: 'sk-ant-api03-...',
-    hint: 'Anthropic Console',
     url: 'https://console.anthropic.com/',
-    info: '<strong>Claude:</strong> Best for high-quality summaries. Uses claude-sonnet-4-20250514.',
     validatePrefix: (key) => key.startsWith('sk-ant-')
   },
   openai: {
     name: 'OpenAI',
     placeholder: 'sk-...',
-    hint: 'OpenAI Platform',
     url: 'https://platform.openai.com/api-keys',
-    info: '<strong>OpenAI:</strong> Uses GPT-4o. Fast and reliable summaries.',
     validatePrefix: (key) => key.startsWith('sk-')
   },
   gemini: {
     name: 'Gemini',
     placeholder: 'AIza...',
-    hint: 'Google AI Studio',
     url: 'https://aistudio.google.com/app/apikey',
-    info: '<strong>Gemini:</strong> Uses Gemini 1.5 Pro. Handles long videos well.',
     validatePrefix: (key) => key.startsWith('AIza')
   }
 };
 
+// Get translated API config
+function getApiConfig(provider) {
+  const base = API_CONFIGS[provider];
+  return {
+    ...base,
+    hint: t(provider + 'Hint', currentLang),
+    info: t(provider + 'Info', currentLang)
+  };
+}
+
 // Load saved settings on page load
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    const result = await chrome.storage.sync.get(['apiProvider', 'apiKey', 'themeMode']);
+    const result = await chrome.storage.sync.get(['apiProvider', 'apiKey', 'themeMode', 'language']);
+
+    // Load language setting first
+    if (result.language) {
+      languageSelect.value = result.language;
+      currentLang = resolveLanguage(result.language);
+    } else {
+      currentLang = getSystemLanguage();
+    }
+
+    // Apply translations
+    applyTranslations();
+
     if (result.themeMode) {
       themeModeSelect.value = result.themeMode;
     }
@@ -59,12 +79,61 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// Apply translations to the page
+function applyTranslations() {
+  // Title and subtitle
+  document.getElementById('options-title').textContent = t('optionsTitle', currentLang);
+  document.getElementById('options-subtitle').textContent = t('optionsSubtitle', currentLang);
+
+  // Labels
+  document.getElementById('label-language').textContent = t('labelLanguage', currentLang);
+  document.getElementById('label-theme-mode').textContent = t('labelThemeMode', currentLang);
+  document.getElementById('label-api-provider').textContent = t('labelAiProvider', currentLang);
+  document.getElementById('label-api-key').textContent = t('labelApiKey', currentLang);
+
+  // Language options (keep English/日本語 as-is for recognition)
+  languageSelect.options[0].textContent = t('langSystem', currentLang);
+
+  // Theme options
+  document.getElementById('theme-system').textContent = t('themeSystem', currentLang);
+  document.getElementById('theme-light').textContent = t('themeLight', currentLang);
+  document.getElementById('theme-dark').textContent = t('themeDark', currentLang);
+
+  // Provider options
+  document.getElementById('provider-claude').textContent = t('providerClaude', currentLang);
+  document.getElementById('provider-openai').textContent = t('providerOpenai', currentLang);
+  document.getElementById('provider-gemini').textContent = t('providerGemini', currentLang);
+
+  // API key placeholder
+  apiKeyInput.placeholder = t('apiKeyPlaceholder', currentLang);
+
+  // Buttons
+  document.getElementById('verify-btn-text').textContent = t('btnVerify', currentLang);
+  document.getElementById('save-btn-text').textContent = t('btnSaveClose', currentLang);
+
+  // Update provider UI with new translations
+  updateProviderUI();
+}
+
+// Language change - save immediately and update UI
+languageSelect.addEventListener('change', async () => {
+  const language = languageSelect.value;
+  try {
+    await chrome.storage.sync.set({ language });
+    currentLang = resolveLanguage(language);
+    applyTranslations();
+    showNotification(t('languageChanged', currentLang), 'success');
+  } catch (error) {
+    console.error('Failed to save language:', error);
+  }
+});
+
 // Theme mode change - save immediately
 themeModeSelect.addEventListener('change', async () => {
   const themeMode = themeModeSelect.value;
   try {
     await chrome.storage.sync.set({ themeMode });
-    showNotification('Theme changed', 'success');
+    showNotification(t('themeChanged', currentLang), 'success');
   } catch (error) {
     console.error('Failed to save theme:', error);
   }
@@ -78,11 +147,11 @@ apiProviderSelect.addEventListener('change', () => {
 
 function updateProviderUI() {
   const provider = apiProviderSelect.value;
-  const config = API_CONFIGS[provider];
+  const baseConfig = API_CONFIGS[provider];
+  const config = getApiConfig(provider);
 
-  apiKeyInput.placeholder = config.placeholder;
-  apiLink.textContent = config.hint;
-  apiLink.href = config.url;
+  apiKeyInput.placeholder = baseConfig.placeholder;
+  apiHint.innerHTML = `${t('getApiKeyFrom', currentLang)} <a href="${baseConfig.url}" target="_blank" id="api-link">${config.hint}</a>`;
   apiInfo.innerHTML = config.info;
 }
 
@@ -143,17 +212,17 @@ verifyBtn.addEventListener('click', async () => {
   const config = API_CONFIGS[provider];
 
   if (!apiKey) {
-    showStatus('Please enter an API key', 'error');
+    showStatus(t('pleaseEnterApiKey', currentLang), 'error');
     return;
   }
 
   if (!config.validatePrefix(apiKey)) {
-    showStatus(`Please enter a valid ${config.name} API key`, 'error');
+    showStatus(t('pleaseEnterValidApiKey', currentLang).replace('{provider}', config.name), 'error');
     return;
   }
 
   verifyBtn.disabled = true;
-  showStatus('Verifying API key...', 'verifying');
+  showStatus(t('verifyingApiKey', currentLang), 'verifying');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -163,12 +232,12 @@ verifyBtn.addEventListener('click', async () => {
     });
 
     if (response && response.success) {
-      showStatus('API key is valid', 'success');
+      showStatus(t('apiKeyValid', currentLang), 'success');
     } else {
-      showStatus(response?.error || 'API key is invalid', 'error');
+      showStatus(response?.error || t('apiKeyInvalid', currentLang), 'error');
     }
   } catch (error) {
-    showStatus('Verification failed: ' + error.message, 'error');
+    showStatus(t('verificationFailed', currentLang) + ': ' + error.message, 'error');
   } finally {
     verifyBtn.disabled = false;
   }
@@ -183,12 +252,12 @@ form.addEventListener('submit', async (e) => {
   const config = API_CONFIGS[provider];
 
   if (!apiKey) {
-    showNotification('Please enter an API key', 'error');
+    showNotification(t('pleaseEnterApiKey', currentLang), 'error');
     return;
   }
 
   if (!config.validatePrefix(apiKey)) {
-    showNotification(`Please enter a valid ${config.name} API key`, 'error');
+    showNotification(t('pleaseEnterValidApiKey', currentLang).replace('{provider}', config.name), 'error');
     return;
   }
 
@@ -196,7 +265,7 @@ form.addEventListener('submit', async (e) => {
 
   try {
     // Verify before saving
-    showStatus('Verifying API key...', 'verifying');
+    showStatus(t('verifyingApiKey', currentLang), 'verifying');
 
     const verifyResponse = await chrome.runtime.sendMessage({
       action: 'verifyApiKey',
@@ -205,8 +274,8 @@ form.addEventListener('submit', async (e) => {
     });
 
     if (!verifyResponse || !verifyResponse.success) {
-      showStatus(verifyResponse?.error || 'API key is invalid', 'error');
-      showNotification('API key is invalid. Please check.', 'error');
+      showStatus(verifyResponse?.error || t('apiKeyInvalid', currentLang), 'error');
+      showNotification(t('apiKeyInvalidCheck', currentLang), 'error');
       return;
     }
 
@@ -216,8 +285,8 @@ form.addEventListener('submit', async (e) => {
       apiKey: apiKey
     });
 
-    showStatus('API key is valid', 'success');
-    showNotification('Settings saved', 'success');
+    showStatus(t('apiKeyValid', currentLang), 'success');
+    showNotification(t('settingsSaved', currentLang), 'success');
 
     // Close the options page after a short delay
     setTimeout(() => {
@@ -226,7 +295,7 @@ form.addEventListener('submit', async (e) => {
 
   } catch (error) {
     console.error('Failed to save settings:', error);
-    showNotification('Failed to save settings', 'error');
+    showNotification(t('failedToSaveSettings', currentLang), 'error');
   } finally {
     saveBtn.disabled = false;
   }

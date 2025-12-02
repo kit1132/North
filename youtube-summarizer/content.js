@@ -4,6 +4,139 @@
 // Store transcript data
 let transcriptData = [];
 let currentSummary = '';
+let currentLang = 'en';
+
+// Inline translations for content script
+const CONTENT_LOCALES = {
+  en: {
+    extensionName: 'YouTube Summary',
+    showTranscript: 'Show transcript',
+    tabTranscript: 'Transcript',
+    tabSummary: 'Summary',
+    btnLoad: 'Load',
+    btnCopy: 'Copy',
+    btnSummarize: 'Summarize',
+    emptyTranscript: 'Click "Load" to<br>get the transcript',
+    emptySummary: 'Click "Summarize" to<br>generate AI summary',
+    loadingTranscript: 'Loading transcript...',
+    loadingSummary: 'Generating summary...',
+    transcriptCopied: 'Transcript copied to clipboard',
+    summaryCopied: 'Summary copied to clipboard',
+    noTranscript: 'No transcript available',
+    noSummary: 'No summary available',
+    failedToCopy: 'Failed to copy',
+    apiKeyNotSet: 'API key not set<br>Please configure in extension settings',
+    failedToGenerateSummary: 'Failed to generate summary'
+  },
+  ja: {
+    extensionName: 'YouTube要約',
+    showTranscript: '字幕を表示',
+    tabTranscript: '字幕',
+    tabSummary: '要約',
+    btnLoad: '読込',
+    btnCopy: 'コピー',
+    btnSummarize: '要約',
+    emptyTranscript: '「読込」をクリックして<br>字幕を取得',
+    emptySummary: '「要約」をクリックして<br>AI要約を生成',
+    loadingTranscript: '字幕を読み込み中...',
+    loadingSummary: '要約を生成中...',
+    transcriptCopied: '字幕をクリップボードにコピーしました',
+    summaryCopied: '要約をクリップボードにコピーしました',
+    noTranscript: '字幕がありません',
+    noSummary: '要約がありません',
+    failedToCopy: 'コピーに失敗しました',
+    apiKeyNotSet: 'APIキーが設定されていません<br>拡張機能の設定で設定してください',
+    failedToGenerateSummary: '要約の生成に失敗しました'
+  }
+};
+
+// Get system language
+function getSystemLanguage() {
+  const lang = navigator.language || 'en';
+  return lang.startsWith('ja') ? 'ja' : 'en';
+}
+
+// Resolve language setting
+function resolveLanguage(setting) {
+  if (setting === 'system') {
+    return getSystemLanguage();
+  }
+  return setting || 'en';
+}
+
+// Translation function for content script
+function ct(key) {
+  const locale = CONTENT_LOCALES[currentLang] || CONTENT_LOCALES.en;
+  return locale[key] || CONTENT_LOCALES.en[key] || key;
+}
+
+// Initialize language from storage
+async function initContentLanguage() {
+  try {
+    const result = await chrome.storage.sync.get(['language']);
+    if (result.language) {
+      currentLang = resolveLanguage(result.language);
+    } else {
+      currentLang = getSystemLanguage();
+    }
+  } catch (error) {
+    console.error('Failed to load language:', error);
+    currentLang = 'en';
+  }
+}
+
+// Listen for language changes
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'sync' && changes.language) {
+    currentLang = resolveLanguage(changes.language.newValue || 'system');
+    updateContentTranslations();
+  }
+});
+
+// Update translations in the content script UI
+function updateContentTranslations() {
+  const toggle = document.getElementById('yt-summarizer-toggle');
+  if (toggle) toggle.title = ct('showTranscript');
+
+  const title = document.querySelector('.yt-summarizer-title');
+  if (title) title.textContent = ct('extensionName');
+
+  const tabs = document.querySelectorAll('.yt-summarizer-tab');
+  tabs.forEach(tab => {
+    if (tab.dataset.tab === 'transcript') tab.textContent = ct('tabTranscript');
+    if (tab.dataset.tab === 'summary') tab.textContent = ct('tabSummary');
+  });
+
+  const loadBtn = document.getElementById('yt-summarizer-load-btn');
+  if (loadBtn) {
+    const svg = loadBtn.querySelector('svg').outerHTML;
+    loadBtn.innerHTML = svg + ' ' + ct('btnLoad');
+  }
+
+  const copyTranscriptBtn = document.getElementById('yt-summarizer-copy-transcript-btn');
+  if (copyTranscriptBtn) {
+    const svg = copyTranscriptBtn.querySelector('svg').outerHTML;
+    copyTranscriptBtn.innerHTML = svg + ' ' + ct('btnCopy');
+  }
+
+  const summarizeBtn = document.getElementById('yt-summarizer-summarize-btn');
+  if (summarizeBtn) {
+    const svg = summarizeBtn.querySelector('svg').outerHTML;
+    summarizeBtn.innerHTML = svg + ' ' + ct('btnSummarize');
+  }
+
+  const copySummaryBtn = document.getElementById('yt-summarizer-copy-summary-btn');
+  if (copySummaryBtn) {
+    const svg = copySummaryBtn.querySelector('svg').outerHTML;
+    copySummaryBtn.innerHTML = svg + ' ' + ct('btnCopy');
+  }
+
+  // Update empty states
+  updateTranscriptUI();
+  if (!currentSummary) {
+    updateSummaryUI('empty');
+  }
+}
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -25,10 +158,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Initialize when on YouTube watch page
-function init() {
+async function init() {
   if (!window.location.pathname.includes('/watch')) {
     return;
   }
+
+  // Initialize language first
+  await initContentLanguage();
 
   // Wait for page to load
   if (document.readyState === 'loading') {
@@ -73,7 +209,7 @@ function createUI() {
       <polyline points="10 9 9 9 8 9"></polyline>
     </svg>
   `;
-  toggleBtn.title = 'Show transcript';
+  toggleBtn.title = ct('showTranscript');
   toggleBtn.addEventListener('click', togglePanel);
   document.body.appendChild(toggleBtn);
 
@@ -84,7 +220,7 @@ function createUI() {
     <div class="yt-summarizer-header">
       <div class="yt-summarizer-header-left">
         <div class="yt-summarizer-logo">Y</div>
-        <span class="yt-summarizer-title">YouTube Summary</span>
+        <span class="yt-summarizer-title">${ct('extensionName')}</span>
       </div>
       <button class="yt-summarizer-close-btn" id="yt-summarizer-close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -95,8 +231,8 @@ function createUI() {
     </div>
 
     <div class="yt-summarizer-tabs">
-      <button class="yt-summarizer-tab active" data-tab="transcript">Transcript</button>
-      <button class="yt-summarizer-tab" data-tab="summary">Summary</button>
+      <button class="yt-summarizer-tab active" data-tab="transcript">${ct('tabTranscript')}</button>
+      <button class="yt-summarizer-tab" data-tab="summary">${ct('tabSummary')}</button>
     </div>
 
     <div class="yt-summarizer-content">
@@ -108,14 +244,14 @@ function createUI() {
               <polyline points="23 4 23 10 17 10"></polyline>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
             </svg>
-            Load
+            ${ct('btnLoad')}
           </button>
           <button class="yt-summarizer-btn yt-summarizer-btn-secondary" id="yt-summarizer-copy-transcript-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
-            Copy
+            ${ct('btnCopy')}
           </button>
         </div>
         <div class="yt-summarizer-transcript-list" id="yt-summarizer-transcript-list">
@@ -126,7 +262,7 @@ function createUI() {
                 <polyline points="14 2 14 8 20 8"></polyline>
               </svg>
             </div>
-            <p class="yt-summarizer-empty-text">Click "Load" to<br>get the transcript</p>
+            <p class="yt-summarizer-empty-text">${ct('emptyTranscript')}</p>
           </div>
         </div>
       </div>
@@ -140,14 +276,14 @@ function createUI() {
               <path d="M18 20V4"></path>
               <path d="M6 20v-4"></path>
             </svg>
-            Summarize
+            ${ct('btnSummarize')}
           </button>
           <button class="yt-summarizer-btn yt-summarizer-btn-secondary" id="yt-summarizer-copy-summary-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
-            Copy
+            ${ct('btnCopy')}
           </button>
         </div>
         <div class="yt-summarizer-summary-content" id="yt-summarizer-summary-content">
@@ -159,7 +295,7 @@ function createUI() {
                 <path d="M6 20v-4"></path>
               </svg>
             </div>
-            <p class="yt-summarizer-empty-text">Click "Summarize" to<br>generate AI summary</p>
+            <p class="yt-summarizer-empty-text">${ct('emptySummary')}</p>
           </div>
         </div>
       </div>
@@ -231,7 +367,7 @@ async function loadTranscript() {
   listEl.innerHTML = `
     <div class="yt-summarizer-loading">
       <div class="yt-summarizer-spinner"></div>
-      <span class="yt-summarizer-loading-text">Loading transcript...</span>
+      <span class="yt-summarizer-loading-text">${ct('loadingTranscript')}</span>
     </div>
   `;
 
@@ -259,6 +395,7 @@ async function loadTranscript() {
 // Update transcript UI
 function updateTranscriptUI() {
   const listEl = document.getElementById('yt-summarizer-transcript-list');
+  if (!listEl) return;
 
   if (transcriptData.length === 0) {
     listEl.innerHTML = `
@@ -269,7 +406,7 @@ function updateTranscriptUI() {
             <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
         </div>
-        <p class="yt-summarizer-empty-text">Click "Load" to<br>get the transcript</p>
+        <p class="yt-summarizer-empty-text">${ct('emptyTranscript')}</p>
       </div>
     `;
     return;
@@ -308,7 +445,7 @@ function seekVideo(seconds) {
 // Copy transcript to clipboard
 async function copyTranscript() {
   if (transcriptData.length === 0) {
-    showNotification('No transcript available');
+    showNotification(ct('noTranscript'));
     return;
   }
 
@@ -316,9 +453,9 @@ async function copyTranscript() {
 
   try {
     await navigator.clipboard.writeText(text);
-    showNotification('Transcript copied to clipboard');
+    showNotification(ct('transcriptCopied'));
   } catch (error) {
-    showNotification('Failed to copy');
+    showNotification(ct('failedToCopy'));
   }
 }
 
@@ -337,7 +474,7 @@ async function summarize() {
   }
 
   // Check API key
-  const result = await chrome.storage.sync.get(['apiKey', 'apiProvider']);
+  const result = await chrome.storage.sync.get(['apiKey', 'apiProvider', 'language']);
   if (!result.apiKey) {
     contentEl.innerHTML = `
       <div class="yt-summarizer-error">
@@ -348,7 +485,7 @@ async function summarize() {
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
-        <p class="yt-summarizer-error-message">API key not set<br>Please configure in extension settings</p>
+        <p class="yt-summarizer-error-message">${ct('apiKeyNotSet')}</p>
       </div>
     `;
     return;
@@ -359,7 +496,7 @@ async function summarize() {
   contentEl.innerHTML = `
     <div class="yt-summarizer-loading">
       <div class="yt-summarizer-spinner"></div>
-      <span class="yt-summarizer-loading-text">Generating summary...</span>
+      <span class="yt-summarizer-loading-text">${ct('loadingSummary')}</span>
     </div>
   `;
 
@@ -368,11 +505,12 @@ async function summarize() {
 
     const response = await chrome.runtime.sendMessage({
       action: 'summarize',
-      transcript: transcript
+      transcript: transcript,
+      language: currentLang
     });
 
     if (!response || !response.success) {
-      throw new Error(response?.error || 'Failed to generate summary');
+      throw new Error(response?.error || ct('failedToGenerateSummary'));
     }
 
     currentSummary = response.summary;
@@ -380,7 +518,7 @@ async function summarize() {
 
     // Auto copy
     await navigator.clipboard.writeText(currentSummary);
-    showNotification('Summary copied to clipboard');
+    showNotification(ct('summaryCopied'));
 
   } catch (error) {
     contentEl.innerHTML = `
@@ -403,6 +541,7 @@ async function summarize() {
 // Update summary UI
 function updateSummaryUI(state) {
   const contentEl = document.getElementById('yt-summarizer-summary-content');
+  if (!contentEl) return;
 
   if (state === 'empty' || !currentSummary) {
     contentEl.innerHTML = `
@@ -414,7 +553,7 @@ function updateSummaryUI(state) {
             <path d="M6 20v-4"></path>
           </svg>
         </div>
-        <p class="yt-summarizer-empty-text">Click "Summarize" to<br>generate AI summary</p>
+        <p class="yt-summarizer-empty-text">${ct('emptySummary')}</p>
       </div>
     `;
     return;
@@ -428,15 +567,15 @@ function updateSummaryUI(state) {
 // Copy summary to clipboard
 async function copySummary() {
   if (!currentSummary) {
-    showNotification('No summary available');
+    showNotification(ct('noSummary'));
     return;
   }
 
   try {
     await navigator.clipboard.writeText(currentSummary);
-    showNotification('Summary copied');
+    showNotification(ct('summaryCopied'));
   } catch (error) {
-    showNotification('Failed to copy');
+    showNotification(ct('failedToCopy'));
   }
 }
 
