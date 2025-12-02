@@ -1,11 +1,48 @@
-// Side Panel Script for YouTube Summarizer
+// ============================================================================
+// sidepanel-script.js - サイドパネルのメイン処理
+// ============================================================================
+//
+// 【このファイルの役割】
+// Chrome のサイドパネル（右側に表示される領域）の動作を制御します。
+// YouTube動画の字幕取得、AI要約生成、クリップボードコピーなどを処理します。
+//
+// 【主な機能】
+// 1. YouTubeページの検出と動画情報の取得
+// 2. 字幕（トランスクリプト）の読み込み
+// 3. AI APIを使った要約の生成
+// 4. コピー機能、動画シーク機能
+// 5. テーマ切り替え、言語切り替え
+//
+// 【Chrome拡張機能の通信】
+// - chrome.tabs: タブの情報を取得・操作
+// - chrome.scripting: ページ内でスクリプトを実行
+// - chrome.runtime.sendMessage: バックグラウンドスクリプトと通信
+// - chrome.storage: 設定の保存・読み込み
+// ============================================================================
 
-let transcriptData = [];
-let currentSummary = '';
-let currentTabId = null;
-let currentLang = 'en';
+// ----------------------------------------------------------------------------
+// グローバル変数（状態管理）
+// ----------------------------------------------------------------------------
+// これらの変数でサイドパネル全体の状態を管理します。
+// 各関数からアクセスして読み書きします。
+// ----------------------------------------------------------------------------
+let transcriptData = [];   // 字幕データの配列 [{time, seconds, text}, ...]
+let currentSummary = '';   // 現在の要約テキスト
+let currentTabId = null;   // アクティブなタブのID
+let currentLang = 'en';    // 現在の言語設定
 
-// Theme Management
+// ============================================================================
+// テーマ管理（Theme Management）
+// ============================================================================
+// ライトモード/ダークモード/システム設定に応じた表示を制御します。
+// CSSの data-theme 属性を切り替えることで色を変更します。
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// initTheme - テーマの初期化
+// ----------------------------------------------------------------------------
+// ページ読み込み時に保存されたテーマ設定を読み込んで適用します。
+// ----------------------------------------------------------------------------
 async function initTheme() {
   try {
     const result = await chrome.storage.sync.get(['themeMode']);
@@ -16,6 +53,16 @@ async function initTheme() {
   }
 }
 
+// ----------------------------------------------------------------------------
+// applyTheme - テーマを適用
+// ----------------------------------------------------------------------------
+// 引数の mode に応じて HTML要素の data-theme 属性を設定します。
+//
+// mode の値:
+//   'dark'   - ダークモードを強制適用
+//   'light'  - ライトモード（data-theme属性を削除）
+//   'system' - OSの設定に従う（prefers-color-scheme を確認）
+// ----------------------------------------------------------------------------
 function applyTheme(mode) {
   const html = document.documentElement;
 
@@ -33,7 +80,12 @@ function applyTheme(mode) {
   }
 }
 
-// Listen for system theme changes
+// ----------------------------------------------------------------------------
+// システムテーマ変更の監視
+// ----------------------------------------------------------------------------
+// OSのダークモード設定が変更されたときに、テーマを再適用します。
+// （例：macOSの「外観」設定が変更されたとき）
+// ----------------------------------------------------------------------------
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async () => {
   const result = await chrome.storage.sync.get(['themeMode']);
   if (!result.themeMode || result.themeMode === 'system') {
@@ -41,7 +93,15 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', asy
   }
 });
 
-// Listen for theme and language changes from settings
+// ----------------------------------------------------------------------------
+// 設定変更の監視（リアルタイム反映）
+// ----------------------------------------------------------------------------
+// 設定画面(options.html)で設定が変更されたとき、サイドパネルにも
+// 即座に反映させます。ページを再読み込みしなくても変更が適用されます。
+//
+// chrome.storage.onChanged は設定が変更されるたびに呼ばれます。
+// namespace が 'sync' の場合は chrome.storage.sync の変更です。
+// ----------------------------------------------------------------------------
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'sync') {
     if (changes.themeMode) {
@@ -54,10 +114,20 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   }
 });
 
-// Initialize theme immediately
+// テーマを即座に初期化（ページ読み込み時に実行）
 initTheme();
 
-// Language Management
+// ============================================================================
+// 言語管理（Language Management）
+// ============================================================================
+// 表示言語の切り替えと翻訳を制御します。
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// initLanguage - 言語設定の初期化
+// ----------------------------------------------------------------------------
+// ページ読み込み時に保存された言語設定を読み込み、UI に適用します。
+// ----------------------------------------------------------------------------
 async function initLanguage() {
   try {
     const result = await chrome.storage.sync.get(['language']);
@@ -74,7 +144,18 @@ async function initLanguage() {
   }
 }
 
-// Apply translations to the sidepanel
+// ----------------------------------------------------------------------------
+// applyTranslations - サイドパネルの翻訳を適用
+// ----------------------------------------------------------------------------
+// サイドパネル内のすべてのテキスト要素を現在の言語に翻訳します。
+// t() 関数を使って locales.js から翻訳テキストを取得します。
+//
+// 【処理対象】
+// - ヘッダータイトル、設定ボタンのツールチップ
+// - タブ名（字幕/要約）
+// - ボタンテキスト（読込/コピー/要約）
+// - 空状態のメッセージ
+// ----------------------------------------------------------------------------
 function applyTranslations() {
   // Header
   const headerTitle = document.getElementById('header-title');
@@ -111,19 +192,29 @@ function applyTranslations() {
   }
 }
 
-// Initialize language immediately
+// 言語を即座に初期化（ページ読み込み時に実行）
 initLanguage();
 
-// DOM Elements
-const notYoutubeEl = document.getElementById('not-youtube');
-const mainContentEl = document.getElementById('main-content');
-const videoInfoEl = document.getElementById('video-info');
-const videoTitleEl = document.getElementById('video-title');
-const transcriptListEl = document.getElementById('transcript-list');
-const summaryContentEl = document.getElementById('summary-content');
-const notificationEl = document.getElementById('notification');
+// ============================================================================
+// DOM要素の取得
+// ============================================================================
+// HTML内の要素を取得して変数に格納します。
+// これらの変数を使って画面の表示を制御します。
+// ============================================================================
+const notYoutubeEl = document.getElementById('not-youtube');       // YouTube以外の時のメッセージ
+const mainContentEl = document.getElementById('main-content');     // メインコンテンツエリア
+const videoInfoEl = document.getElementById('video-info');         // 動画情報表示エリア
+const videoTitleEl = document.getElementById('video-title');       // 動画タイトル表示
+const transcriptListEl = document.getElementById('transcript-list'); // 字幕リスト表示エリア
+const summaryContentEl = document.getElementById('summary-content'); // 要約表示エリア
+const notificationEl = document.getElementById('notification');    // 通知メッセージ表示
 
-// Initialize
+// ============================================================================
+// 初期化処理
+// ============================================================================
+// DOMContentLoaded: HTML の読み込みが完了したときに実行されます。
+// イベントリスナーの設定と現在のタブのチェックを行います。
+// ============================================================================
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   await checkCurrentTab();
@@ -137,7 +228,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-// Setup event listeners
+// ----------------------------------------------------------------------------
+// setupEventListeners - イベントリスナーの設定
+// ----------------------------------------------------------------------------
+// 各ボタンやタブにクリックイベントを設定します。
+// ユーザーの操作に対応する処理を登録しています。
+// ----------------------------------------------------------------------------
 function setupEventListeners() {
   // Settings button
   document.getElementById('settings-btn').addEventListener('click', () => {
@@ -162,7 +258,21 @@ function setupEventListeners() {
   document.getElementById('copy-summary-btn').addEventListener('click', copySummary);
 }
 
-// Check if current tab is YouTube
+// ============================================================================
+// YouTubeページ検出とタブ管理
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// checkCurrentTab - 現在のタブがYouTubeかチェック
+// ----------------------------------------------------------------------------
+// アクティブなタブを確認し、YouTubeの動画ページかどうかを判定します。
+//
+// 【処理の流れ】
+// 1. chrome.tabs.query で現在のタブ情報を取得
+// 2. URLに youtube.com/watch が含まれていれば動画ページ
+// 3. 動画ページなら: メインコンテンツを表示、動画タイトルを取得
+// 4. 違う場合: 「YouTubeを開いてください」メッセージを表示
+// ----------------------------------------------------------------------------
 async function checkCurrentTab() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -217,6 +327,7 @@ async function getVideoTitle(tabId) {
 }
 
 // Switch tabs
+// タブを切り替える
 function switchTab(tabName) {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.tab === tabName);
@@ -226,7 +337,26 @@ function switchTab(tabName) {
   });
 }
 
-// Load transcript from content script
+// ============================================================================
+// 字幕読み込み処理
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// loadTranscript - 字幕を読み込む
+// ----------------------------------------------------------------------------
+// YouTubeページから字幕（トランスクリプト）を取得します。
+//
+// 【処理の流れ】
+// 1. ローディング表示
+// 2. chrome.scripting.executeScript でページ内でextractTranscript()を実行
+//    （extractTranscript関数はこのファイルの末尾に定義されています）
+// 3. 結果を transcriptData に保存
+// 4. UIを更新
+//
+// 【chrome.scripting.executeScriptについて】
+// YouTube のページ内でJavaScriptを実行できます。
+// サイドパネルから直接DOMにアクセスできないため、この方法を使います。
+// ----------------------------------------------------------------------------
 async function loadTranscript() {
   const loadBtn = document.getElementById('load-btn');
   loadBtn.disabled = true;
@@ -348,7 +478,26 @@ async function copyTranscript() {
   }
 }
 
-// Summarize
+// ============================================================================
+// AI要約処理
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// summarize - AI要約を生成
+// ----------------------------------------------------------------------------
+// 字幕テキストをAI APIに送信して要約を生成します。
+//
+// 【処理の流れ】
+// 1. 字幕が読み込まれていなければ自動で読み込む
+// 2. APIキーの設定を確認
+// 3. ローディング表示
+// 4. chrome.runtime.sendMessage で background.js に要約リクエスト
+// 5. 結果を表示し、自動でクリップボードにコピー
+//
+// 【background.js との連携】
+// サイドパネルから直接APIを呼べないため、background.js（Service Worker）
+// 経由でAPI呼び出しを行います。
+// ----------------------------------------------------------------------------
 async function summarize() {
   const summarizeBtn = document.getElementById('summarize-btn');
 
@@ -522,6 +671,7 @@ async function copySummary() {
 }
 
 // Show notification
+// 通知メッセージを表示（2秒後に自動で消える）
 function showNotification(message) {
   notificationEl.textContent = message;
   notificationEl.classList.add('show');
@@ -530,7 +680,22 @@ function showNotification(message) {
   }, 2000);
 }
 
-// Parse markdown to HTML
+// ============================================================================
+// ユーティリティ関数
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// parseMarkdown - マークダウンをHTMLに変換
+// ----------------------------------------------------------------------------
+// AIからの応答はマークダウン形式で返ってくるため、
+// HTMLに変換して画面に表示します。
+//
+// 【変換対象】
+// - 見出し（#, ##, ###）→ <h3>
+// - 太字（**text**）→ <strong>
+// - 表（|...|）→ <table>
+// - リスト（- item）→ <ul><li>
+// ----------------------------------------------------------------------------
 function parseMarkdown(text) {
   let html = text;
 
@@ -561,14 +726,34 @@ function parseMarkdown(text) {
   return `<p>${html}</p>`;
 }
 
-// Escape HTML
+// HTMLエスケープ（XSS対策）
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-// ===== Transcript Extraction Function (injected into page) =====
+// ============================================================================
+// 字幕抽出関数（YouTubeページ内で実行される）
+// ============================================================================
+// この関数は chrome.scripting.executeScript でYouTubeページ内で実行されます。
+// サイドパネルのコンテキストではなく、YouTubeページのコンテキストで動作します。
+//
+// 【なぜここに定義されているか】
+// executeScript({ func: extractTranscript }) で呼び出すには、
+// 関数を直接定義して渡す必要があるためです。
+//
+// 【字幕取得の仕組み】
+// YouTubeは動画の字幕データをページ内のスクリプトやAPIから取得できます。
+// 複数の方法（フォールバック）を用意して、確実に取得できるようにしています。
+//
+// 【取得方法（優先順）】
+// 0. Innertube API（最も安定、yt-dlpと同様の方法）
+// 1. ページ内スクリプトから captionTracks を抽出
+// 2. ytInitialPlayerResponse グローバル変数から取得
+// 3. movie_player.getPlayerResponse() から取得
+// 4. baseUrl を直接探して字幕XMLを取得
+// ============================================================================
 function extractTranscript() {
   function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);

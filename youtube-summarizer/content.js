@@ -1,12 +1,40 @@
-// YouTube Transcript Extractor with Side Panel
-// This script extracts transcript/subtitle data from YouTube videos
+// ============================================================================
+// content.js - コンテンツスクリプト
+// ============================================================================
+//
+// 【このファイルの役割】
+// YouTubeのページ内に直接挿入されて動作するスクリプトです。
+// ページのDOMに直接アクセスでき、字幕データの抽出やUIの追加を行います。
+//
+// 【コンテンツスクリプトとは】
+// Chrome拡張機能の一部で、指定したWebページのコンテキストで実行されます。
+// manifest.json の content_scripts で指定されたURLで自動的に読み込まれます。
+//
+// 【主な機能】
+// 1. YouTube動画ページに字幕取得ボタンを追加
+// 2. 字幕（トランスクリプト）の抽出
+// 3. ページ内にサイドパネルUIを作成
+// 4. 動画のシーク（再生位置の移動）
+//
+// 【制限事項】
+// - 外部のJSファイル（locales.js等）を直接インポートできない
+// - そのため、翻訳データはこのファイル内に直接定義（CONTENT_LOCALES）
+// - chrome.storageやchrome.runtime.sendMessageは使用可能
+// ============================================================================
 
-// Store transcript data
-let transcriptData = [];
-let currentSummary = '';
-let currentLang = 'en';
+// ----------------------------------------------------------------------------
+// グローバル変数（状態管理）
+// ----------------------------------------------------------------------------
+let transcriptData = [];   // 字幕データの配列
+let currentSummary = '';   // 現在の要約テキスト
+let currentLang = 'en';    // 現在の言語設定
 
-// Inline translations for content script
+// ----------------------------------------------------------------------------
+// CONTENT_LOCALES - コンテンツスクリプト用の翻訳データ
+// ----------------------------------------------------------------------------
+// locales.jsを読み込めないため、ここに直接翻訳を定義しています。
+// sidepanel-script.jsとは別のコンテキストで動作するため、独自の翻訳が必要です。
+// ----------------------------------------------------------------------------
 const CONTENT_LOCALES = {
   en: {
     extensionName: 'YouTube Summary',
@@ -50,7 +78,11 @@ const CONTENT_LOCALES = {
   }
 };
 
-// Get system language
+// ============================================================================
+// 言語管理関数
+// ============================================================================
+
+// システム言語を取得（ブラウザの言語設定）
 function getSystemLanguage() {
   const lang = navigator.language || 'en';
   return lang.startsWith('ja') ? 'ja' : 'en';
@@ -64,7 +96,12 @@ function resolveLanguage(setting) {
   return setting || 'en';
 }
 
-// Translation function for content script
+// ----------------------------------------------------------------------------
+// ct() - コンテンツスクリプト用翻訳関数
+// ----------------------------------------------------------------------------
+// 「ct」は「content translate」の略です。
+// locales.jsのt()関数と同じ役割をコンテンツスクリプト内で果たします。
+// ----------------------------------------------------------------------------
 function ct(key) {
   const locale = CONTENT_LOCALES[currentLang] || CONTENT_LOCALES.en;
   return locale[key] || CONTENT_LOCALES.en[key] || key;
@@ -138,7 +175,16 @@ function updateContentTranslations() {
   }
 }
 
-// Listen for messages from popup
+// ============================================================================
+// メッセージ通信
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// メッセージリスナー
+// ----------------------------------------------------------------------------
+// ポップアップやバックグラウンドスクリプトからのメッセージを受信します。
+// 字幕の取得要求やパネルの開閉要求に対応します。
+// ----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getTranscript') {
     getTranscript()
@@ -157,7 +203,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Initialize when on YouTube watch page
+// ============================================================================
+// 初期化処理
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// init - 初期化関数
+// ----------------------------------------------------------------------------
+// YouTube動画ページで拡張機能を初期化します。
+//
+// 【処理の流れ】
+// 1. /watch ページかどうかを確認
+// 2. 言語設定を読み込み
+// 3. UIを作成
+// 4. URL変更を監視（YouTubeはSPA なのでページ遷移を検出する必要がある）
+//
+// 【SPA（Single Page Application）について】
+// YouTubeはページ全体をリロードせずにコンテンツを切り替えます。
+// そのため、URLの変更をMutationObserverで監視して対応します。
+// ----------------------------------------------------------------------------
 async function init() {
   if (!window.location.pathname.includes('/watch')) {
     return;
@@ -189,7 +253,16 @@ async function init() {
   }).observe(document, { subtree: true, childList: true });
 }
 
-// Create UI elements
+// ============================================================================
+// UI作成
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// createUI - UIを作成
+// ----------------------------------------------------------------------------
+// YouTubeページ内にトグルボタンとサイドパネルを追加します。
+// HTML要素をJavaScriptで動的に生成してDOMに追加します。
+// ----------------------------------------------------------------------------
 function createUI() {
   // Remove existing elements if any
   const existingPanel = document.getElementById('yt-summarizer-panel');
@@ -633,16 +706,29 @@ function parseMarkdown(text) {
   return `<p>${html}</p>`;
 }
 
-// Escape HTML
+// HTMLエスケープ（XSS対策）
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-// ===== Transcript Extraction Functions =====
+// ============================================================================
+// 字幕抽出関数
+// ============================================================================
+// YouTubeから字幕データを取得するための関数群です。
+// YouTubeは様々な方法で字幕データを提供しているため、
+// 複数の取得方法（フォールバック）を用意しています。
+//
+// 【取得方法の優先順位】
+// 1. Innertube API - YouTubeの内部APIを直接呼び出し（最も安定）
+// 2. ページ埋め込みデータ - HTMLに埋め込まれたJSONから抽出
+// 3. YouTube内部API - window変数から取得
+// 4. ページ再取得 - ページを再度fetchして抽出
+// 5. 字幕パネル - UIの字幕パネルから直接読み取り
+// ============================================================================
 
-// Format time from seconds to MM:SS
+// 秒数を MM:SS 形式にフォーマット
 function formatTime(seconds) {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
@@ -650,12 +736,20 @@ function formatTime(seconds) {
 }
 
 // Get video ID from URL
+// URLから動画IDを取得
 function getVideoId() {
   const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get('v');
+  return urlParams.get('v');  // ?v=xxxxx の部分
 }
 
-// Get transcript data as array
+// ----------------------------------------------------------------------------
+// getTranscriptData - 字幕データを取得（メイン関数）
+// ----------------------------------------------------------------------------
+// 複数の方法を順番に試して字幕を取得します。
+// 一つの方法が失敗しても、次の方法を試みます（フォールバック）。
+//
+// 戻り値: [{time: "0:00", seconds: 0, text: "字幕テキスト"}, ...]
+// ----------------------------------------------------------------------------
 async function getTranscriptData() {
   const videoId = getVideoId();
   if (!videoId) {
@@ -700,7 +794,17 @@ async function getTranscript() {
   return formattedTranscript;
 }
 
-// Method 0: Get transcript using YouTube's Innertube API (most reliable)
+// ----------------------------------------------------------------------------
+// getTranscriptFromInnertube - Innertube APIから字幕を取得
+// ----------------------------------------------------------------------------
+// YouTubeの内部API（Innertube）を使用して字幕を取得します。
+// yt-dlpなどのツールと同様の方法で、最も安定した取得方法です。
+//
+// 【処理の流れ】
+// 1. 動画ページを取得してAPIキーとバージョンを抽出
+// 2. player エンドポイントで字幕トラック情報を取得
+// 3. 字幕XMLを取得してパース
+// ----------------------------------------------------------------------------
 async function getTranscriptFromInnertube(videoId) {
   // First, get the video page to extract necessary tokens
   const pageResponse = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
