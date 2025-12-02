@@ -289,6 +289,37 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // ----------------------------------------------------------------------------
+  // 無料版モード用アクション
+  // ----------------------------------------------------------------------------
+  // 無料版の場合、AIのWebインターフェースを開きます。
+  // 字幕は呼び出し元でクリップボードにコピーされています。
+  // ----------------------------------------------------------------------------
+  if (request.action === 'openFreeModeWeb') {
+    chrome.storage.sync.get(['apiProvider'], async (result) => {
+      const provider = result.apiProvider || 'claude';
+      const url = AI_WEB_URLS[provider];
+      try {
+        await chrome.tabs.create({ url: url });
+        sendResponse({ success: true, url: url, provider: provider });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    });
+    return true;
+  }
+
+  // バージョンモードを取得するアクション
+  if (request.action === 'getVersionMode') {
+    chrome.storage.sync.get(['versionMode', 'apiProvider'], (result) => {
+      sendResponse({
+        versionMode: result.versionMode || 'free',
+        apiProvider: result.apiProvider || 'claude'
+      });
+    });
+    return true;
+  }
+
   if (request.action === 'getCachedSummary') {
     const cached = summaryCache.get(request.videoId);
     if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {

@@ -507,8 +507,85 @@ async function summarize() {
     if (transcriptData.length === 0) return;
   }
 
-  // Check API key
-  const settings = await chrome.storage.sync.get(['apiKey', 'apiProvider', 'language']);
+  // バージョンモードを取得
+  const settings = await chrome.storage.sync.get(['apiKey', 'apiProvider', 'language', 'versionMode']);
+  const versionMode = settings.versionMode || 'free';
+
+  // ----------------------------------------------------------------------------
+  // 無料版モードの処理
+  // ----------------------------------------------------------------------------
+  // 無料版の場合: 字幕とプロンプトをクリップボードにコピーし、Webインターフェースを開く
+  // ----------------------------------------------------------------------------
+  if (versionMode === 'free') {
+    summarizeBtn.disabled = true;
+    summaryContentEl.innerHTML = `
+      <div class="loading">
+        <div class="spinner"></div>
+        <span class="loading-text">${t('freeModeSummarizing', currentLang)}</span>
+      </div>
+    `;
+
+    try {
+      const transcript = transcriptData.map(item => `[${item.time}] ${item.text}`).join('\n');
+
+      // プロンプトと字幕を結合してコピー
+      const prompt = getSummaryPrompt(currentLang);
+      const fullText = prompt + transcript;
+
+      await navigator.clipboard.writeText(fullText);
+
+      // Webインターフェースを開く
+      const response = await chrome.runtime.sendMessage({
+        action: 'openFreeModeWeb'
+      });
+
+      if (response && response.success) {
+        const providerName = {
+          claude: 'Claude',
+          openai: 'ChatGPT',
+          gemini: 'Gemini'
+        }[response.provider] || response.provider;
+
+        summaryContentEl.innerHTML = `
+          <div class="free-mode-message">
+            <div class="success-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+            </div>
+            <p class="success-message">${t('freeModeTranscriptCopied', currentLang)} ${providerName}</p>
+            <p class="success-hint">${t('freeModeInstructions', currentLang)}</p>
+          </div>
+        `;
+        showNotification(t('freeModeTranscriptCopied', currentLang) + ' ' + providerName);
+      } else {
+        throw new Error(response?.error || t('errorOccurred', currentLang));
+      }
+    } catch (error) {
+      summaryContentEl.innerHTML = `
+        <div class="error">
+          <div class="error-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <p class="error-message">${error.message}</p>
+        </div>
+      `;
+    } finally {
+      summarizeBtn.disabled = false;
+    }
+    return;
+  }
+
+  // ----------------------------------------------------------------------------
+  // API版モードの処理
+  // ----------------------------------------------------------------------------
+  // API版の場合: APIキーを使用して直接要約を生成
+  // ----------------------------------------------------------------------------
   if (!settings.apiKey) {
     summaryContentEl.innerHTML = `
       <div class="error">

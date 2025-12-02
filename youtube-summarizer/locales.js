@@ -93,6 +93,16 @@ const LOCALES = {
     providerOpenai: 'ChatGPT (OpenAI)',
     providerGemini: 'Gemini (Google)',
 
+    // Version mode (Free/API)
+    labelVersionMode: 'Version',
+    versionFree: 'Free (Web)',
+    versionApi: 'API (Paid)',
+    versionFreeDesc: 'Opens AI web interface with transcript copied. No API key required.',
+    versionApiDesc: 'Direct API access. Requires API key subscription.',
+    freeModeSummarizing: 'Opening AI web interface...',
+    freeModeTranscriptCopied: 'Transcript copied! Paste it in',
+    freeModeInstructions: 'Paste the transcript and ask for a summary',
+
     // API hints
     apiKeyPlaceholder: 'Enter API key...',
     getApiKeyFrom: 'Get your API key from',
@@ -206,6 +216,16 @@ const LOCALES = {
     providerClaude: 'Claude (Anthropic)',
     providerOpenai: 'ChatGPT (OpenAI)',
     providerGemini: 'Gemini (Google)',
+
+    // Version mode (Free/API)
+    labelVersionMode: 'バージョン',
+    versionFree: '無料版 (Web)',
+    versionApi: 'API版 (有料)',
+    versionFreeDesc: 'AIのWebインターフェースを開き、字幕をコピーします。APIキー不要。',
+    versionApiDesc: 'API直接アクセス。APIキーの契約が必要。',
+    freeModeSummarizing: 'AI Webインターフェースを開いています...',
+    freeModeTranscriptCopied: '字幕をコピーしました！貼り付け先:',
+    freeModeInstructions: '字幕を貼り付けて要約を依頼してください',
 
     // API hints
     apiKeyPlaceholder: 'APIキーを入力...',

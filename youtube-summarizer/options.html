@@ -282,6 +282,25 @@
     .api-info strong {
       color: #1F2937;
     }
+
+    /* Hide API-related sections in free mode */
+    .hidden {
+      display: none !important;
+    }
+
+    .version-info {
+      background: #DBEAFE;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+      font-size: 13px;
+      color: #1E40AF;
+    }
+
+    .version-info.free {
+      background: #D1FAE5;
+      color: #065F46;
+    }
   </style>
 </head>
 <body>
@@ -321,6 +340,15 @@
       </div>
 
       <div class="form-group">
+        <label for="version-mode" id="label-version-mode">Version</label>
+        <select id="version-mode">
+          <option value="free" id="version-free">Free (Web)</option>
+          <option value="api" id="version-api">API (Paid)</option>
+        </select>
+        <p class="hint" id="version-hint"></p>
+      </div>
+
+      <div class="form-group" id="api-key-group">
         <label for="api-key" id="label-api-key">API Key</label>
         <div class="input-wrapper">
           <input type="password" id="api-key" placeholder="Enter API key..." autocomplete="off">

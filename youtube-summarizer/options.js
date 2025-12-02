@@ -30,6 +30,9 @@ const form = document.getElementById('options-form');           // 設定フォ�
 const languageSelect = document.getElementById('language');     // 言語選択ドロップダウン
 const themeModeSelect = document.getElementById('theme-mode');  // テーマ選択ドロップダウン
 const apiProviderSelect = document.getElementById('api-provider'); // AIプロバイダー選択
+const versionModeSelect = document.getElementById('version-mode'); // バージョン選択（無料/API）
+const versionHint = document.getElementById('version-hint');    // バージョンのヒント
+const apiKeyGroup = document.getElementById('api-key-group');   // APIキー入力グループ
 const apiKeyInput = document.getElementById('api-key');         // APIキー入力欄
 const toggleKeyBtn = document.getElementById('toggle-key');     // APIキー表示/非表示ボタン
 const verifyBtn = document.getElementById('verify-btn');        // 検証ボタン
@@ -120,7 +123,7 @@ function getApiConfig(provider) {
 // ----------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    const result = await chrome.storage.sync.get(['apiProvider', 'apiKey', 'themeMode', 'language']);
+    const result = await chrome.storage.sync.get(['apiProvider', 'apiKey', 'themeMode', 'language', 'versionMode']);
 
     // Load language setting first
     if (result.language) {
@@ -139,10 +142,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (result.apiProvider) {
       apiProviderSelect.value = result.apiProvider;
     }
+    // Load version mode (default to 'free')
+    if (result.versionMode) {
+      versionModeSelect.value = result.versionMode;
+    } else {
+      versionModeSelect.value = 'free';
+    }
     if (result.apiKey) {
       apiKeyInput.value = result.apiKey;
     }
     updateProviderUI();
+    updateVersionModeUI();
   } catch (error) {
     console.error('Failed to load settings:', error);
   }
@@ -184,6 +194,11 @@ function applyTranslations() {
   document.getElementById('provider-claude').textContent = t('providerClaude', currentLang);
   document.getElementById('provider-openai').textContent = t('providerOpenai', currentLang);
   document.getElementById('provider-gemini').textContent = t('providerGemini', currentLang);
+
+  // Version mode label and options
+  document.getElementById('label-version-mode').textContent = t('labelVersionMode', currentLang);
+  document.getElementById('version-free').textContent = t('versionFree', currentLang);
+  document.getElementById('version-api').textContent = t('versionApi', currentLang);
 
   // API key placeholder
   apiKeyInput.placeholder = t('apiKeyPlaceholder', currentLang);
@@ -239,10 +254,59 @@ themeModeSelect.addEventListener('change', async () => {
 // ----------------------------------------------------------------------------
 // プロバイダーが変更されたとき、UIを更新します（APIキーのヒント等）。
 // ----------------------------------------------------------------------------
-apiProviderSelect.addEventListener('change', () => {
+apiProviderSelect.addEventListener('change', async () => {
   updateProviderUI();  // プロバイダー情報を更新
   clearStatus();       // 検証状態をクリア
+  // プロバイダー変更時にstorageも更新
+  try {
+    await chrome.storage.sync.set({ apiProvider: apiProviderSelect.value });
+  } catch (error) {
+    console.error('Failed to save provider:', error);
+  }
 });
+
+// ----------------------------------------------------------------------------
+// バージョンモード変更イベント
+// ----------------------------------------------------------------------------
+// 無料版/API版が変更されたとき、APIキー入力欄の表示/非表示を切り替えます。
+// 無料版: APIキー不要、Webインターフェースを開く
+// API版: APIキーが必要、直接API呼び出し
+// ----------------------------------------------------------------------------
+versionModeSelect.addEventListener('change', async () => {
+  const versionMode = versionModeSelect.value;
+  try {
+    await chrome.storage.sync.set({ versionMode });
+    updateVersionModeUI();
+    showNotification(t('settingsSaved', currentLang), 'success');
+  } catch (error) {
+    console.error('Failed to save version mode:', error);
+  }
+});
+
+// ----------------------------------------------------------------------------
+// updateVersionModeUI - バージョンモードに応じたUI更新
+// ----------------------------------------------------------------------------
+// 無料版が選択された場合: APIキー入力欄、検証ボタンを非表示
+// API版が選択された場合: APIキー入力欄、検証ボタンを表示
+// ----------------------------------------------------------------------------
+function updateVersionModeUI() {
+  const isFreeMode = versionModeSelect.value === 'free';
+
+  // APIキー関連の要素を表示/非表示
+  apiKeyGroup.classList.toggle('hidden', isFreeMode);
+  apiStatus.classList.toggle('hidden', isFreeMode);
+  apiInfo.classList.toggle('hidden', isFreeMode);
+  verifyBtn.classList.toggle('hidden', isFreeMode);
+
+  // バージョンヒントを更新
+  if (isFreeMode) {
+    versionHint.innerHTML = t('versionFreeDesc', currentLang);
+    versionHint.className = 'hint';
+  } else {
+    versionHint.innerHTML = t('versionApiDesc', currentLang);
+    versionHint.className = 'hint';
+  }
+}
 
 // ----------------------------------------------------------------------------
 // updateProviderUI - プロバイダーに応じた情報表示を更新
@@ -399,35 +463,55 @@ verifyBtn.addEventListener('click', async () => {
 // 「保存して閉じる」ボタンがクリックされたとき、設定を保存します。
 //
 // 【処理の流れ】
-// 1. 入力チェック
-// 2. APIキーの検証（実際にAPIに接続して確認）
-// 3. chrome.storage.sync に保存
+// 1. バージョンモードを確認
+// 2. 無料版: プロバイダーのみ保存
+// 3. API版: APIキーを検証して保存
 // 4. 成功したら設定画面を閉じる
 //
 // 【セキュリティ】
-// - 保存前に必ずAPIキーを検証
+// - API版では保存前に必ずAPIキーを検証
 // - 無効なキーは保存しない
 // ----------------------------------------------------------------------------
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
   const provider = apiProviderSelect.value;
+  const versionMode = versionModeSelect.value;
   const apiKey = apiKeyInput.value.trim();
   const config = API_CONFIGS[provider];
-
-  if (!apiKey) {
-    showNotification(t('pleaseEnterApiKey', currentLang), 'error');
-    return;
-  }
-
-  if (!config.validatePrefix(apiKey)) {
-    showNotification(t('pleaseEnterValidApiKey', currentLang).replace('{provider}', config.name), 'error');
-    return;
-  }
 
   saveBtn.disabled = true;
 
   try {
+    // 無料版の場合はAPIキー検証なしで保存
+    if (versionMode === 'free') {
+      await chrome.storage.sync.set({
+        apiProvider: provider,
+        versionMode: versionMode
+      });
+
+      showNotification(t('settingsSaved', currentLang), 'success');
+
+      // Close the options page after a short delay
+      setTimeout(() => {
+        window.close();
+      }, 1500);
+      return;
+    }
+
+    // API版の場合はAPIキーを検証
+    if (!apiKey) {
+      showNotification(t('pleaseEnterApiKey', currentLang), 'error');
+      saveBtn.disabled = false;
+      return;
+    }
+
+    if (!config.validatePrefix(apiKey)) {
+      showNotification(t('pleaseEnterValidApiKey', currentLang).replace('{provider}', config.name), 'error');
+      saveBtn.disabled = false;
+      return;
+    }
+
     // Verify before saving
     showStatus(t('verifyingApiKey', currentLang), 'verifying');
 
@@ -446,6 +530,7 @@ form.addEventListener('submit', async (e) => {
     // Save to storage
     await chrome.storage.sync.set({
       apiProvider: provider,
+      versionMode: versionMode,
       apiKey: apiKey
     });
 

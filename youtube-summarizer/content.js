@@ -54,7 +54,12 @@ const CONTENT_LOCALES = {
     noSummary: 'No summary available',
     failedToCopy: 'Failed to copy',
     apiKeyNotSet: 'API key not set<br>Please configure in extension settings',
-    failedToGenerateSummary: 'Failed to generate summary'
+    failedToGenerateSummary: 'Failed to generate summary',
+    // Free mode translations
+    freeModeSummarizing: 'Opening AI web interface...',
+    freeModeTranscriptCopied: 'Transcript copied! Paste it in',
+    freeModeInstructions: 'Paste the transcript and ask for a summary',
+    errorOccurred: 'An error occurred'
   },
   ja: {
     extensionName: 'YouTube要約',
@@ -74,7 +79,12 @@ const CONTENT_LOCALES = {
     noSummary: '要約がありません',
     failedToCopy: 'コピーに失敗しました',
     apiKeyNotSet: 'APIキーが設定されていません<br>拡張機能の設定で設定してください',
-    failedToGenerateSummary: '要約の生成に失敗しました'
+    failedToGenerateSummary: '要約の生成に失敗しました',
+    // Free mode translations
+    freeModeSummarizing: 'AI Webインターフェースを開いています...',
+    freeModeTranscriptCopied: '字幕をコピーしました！貼り付け先:',
+    freeModeInstructions: '字幕を貼り付けて要約を依頼してください',
+    errorOccurred: 'エラーが発生しました'
   }
 };
 
