@@ -440,6 +440,9 @@ function extractTranscript() {
 
   async function fetchCaptionTrack(captionTracks) {
     console.log('[YouTube要約] 利用可能な字幕トラック:', captionTracks.length);
+    captionTracks.forEach((t, i) => {
+      console.log(`  ${i + 1}. ${t.languageCode} (${t.kind || 'manual'})`);
+    });
 
     // Priority order: Japanese manual > Japanese auto > English > Any auto > First
     let selectedTrack = captionTracks.find(t => t.languageCode === 'ja' && t.kind !== 'asr') ||
@@ -474,8 +477,76 @@ function extractTranscript() {
     return parseTranscriptXML(xml);
   }
 
+  // Get video ID from current URL
+  function getVideoId() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('v');
+  }
+
+  // Method 0: Use Innertube API (most reliable)
+  async function getTranscriptFromInnertube() {
+    const videoId = getVideoId();
+    if (!videoId) return null;
+
+    // Get page HTML for tokens
+    const pageResponse = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      credentials: 'include'
+    });
+    const pageHtml = await pageResponse.text();
+
+    // Extract INNERTUBE_API_KEY
+    const apiKeyMatch = pageHtml.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
+    if (!apiKeyMatch) {
+      console.log('[YouTube要約] INNERTUBE_API_KEY not found');
+      return null;
+    }
+    const apiKey = apiKeyMatch[1];
+
+    // Extract client version
+    const clientVersionMatch = pageHtml.match(/"clientVersion":"([^"]+)"/);
+    const clientVersion = clientVersionMatch ? clientVersionMatch[1] : '2.20231219.04.00';
+
+    // Use player endpoint to get captions
+    const playerResponse = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: clientVersion,
+            hl: 'ja',
+            gl: 'JP'
+          }
+        },
+        videoId: videoId
+      })
+    });
+
+    if (playerResponse.ok) {
+      const data = await playerResponse.json();
+      const captions = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (captions && captions.length > 0) {
+        console.log('[YouTube要約] Innertube APIから取得成功');
+        return await fetchCaptionTrack(captions);
+      }
+    }
+    return null;
+  }
+
   async function getTranscript() {
     let captionTracks = null;
+
+    // Method 0: Try Innertube API first (most reliable like yt-dlp)
+    try {
+      const innertubeResult = await getTranscriptFromInnertube();
+      if (innertubeResult && innertubeResult.length > 0) {
+        return innertubeResult;
+      }
+    } catch (e) {
+      console.log('[YouTube要約] Innertube API失敗:', e.message);
+    }
 
     // Method 1: Extract captionTracks from script tags
     const scripts = document.querySelectorAll('script');

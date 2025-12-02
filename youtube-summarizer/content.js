@@ -523,11 +523,13 @@ async function getTranscriptData() {
     throw new Error('動画IDが見つかりません');
   }
 
-  // Try multiple methods
+  // Try multiple methods in order of reliability
   const methods = [
+    { name: 'Innertube API', fn: () => getTranscriptFromInnertube(videoId) },
     { name: 'ページ埋め込みデータ', fn: () => getTranscriptFromPage() },
     { name: 'YouTube API', fn: () => getTranscriptFromYouTubeAPI(videoId) },
-    { name: 'ページ再取得', fn: () => getTranscriptFromFetch(videoId) }
+    { name: 'ページ再取得', fn: () => getTranscriptFromFetch(videoId) },
+    { name: '文字起こしパネル', fn: () => getTranscriptFromPanel() }
   ];
 
   for (const method of methods) {
@@ -557,6 +559,215 @@ async function getTranscript() {
   }
 
   return formattedTranscript;
+}
+
+// Method 0: Get transcript using YouTube's Innertube API (most reliable)
+async function getTranscriptFromInnertube(videoId) {
+  // First, get the video page to extract necessary tokens
+  const pageResponse = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    credentials: 'include'
+  });
+  const pageHtml = await pageResponse.text();
+
+  // Extract INNERTUBE_API_KEY
+  const apiKeyMatch = pageHtml.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
+  if (!apiKeyMatch) {
+    console.log('[YouTube要約] INNERTUBE_API_KEY not found');
+    return null;
+  }
+  const apiKey = apiKeyMatch[1];
+
+  // Extract client version
+  const clientVersionMatch = pageHtml.match(/"clientVersion":"([^"]+)"/);
+  const clientVersion = clientVersionMatch ? clientVersionMatch[1] : '2.20231219.04.00';
+
+  // Try to find serializedShareEntity for transcript
+  const serializedMatch = pageHtml.match(/"serializedShareEntity":"([^"]+)"/);
+
+  // Try to find engagement panel params
+  const paramsMatch = pageHtml.match(/"params":"([^"]+)"[^}]*"targetId":"engagement-panel-searchable-transcript"/);
+
+  // Method A: Use get_transcript endpoint if we have the params
+  if (paramsMatch) {
+    try {
+      const transcriptResponse = await fetch(`https://www.youtube.com/youtubei/v1/get_transcript?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: 'WEB',
+              clientVersion: clientVersion,
+              hl: 'ja',
+              gl: 'JP'
+            }
+          },
+          params: paramsMatch[1]
+        })
+      });
+
+      if (transcriptResponse.ok) {
+        const data = await transcriptResponse.json();
+        const transcript = parseInnertubeTranscript(data);
+        if (transcript && transcript.length > 0) {
+          return transcript;
+        }
+      }
+    } catch (e) {
+      console.log('[YouTube要約] get_transcript API failed:', e.message);
+    }
+  }
+
+  // Method B: Get captions from player endpoint
+  try {
+    const playerResponse = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: clientVersion,
+            hl: 'ja',
+            gl: 'JP'
+          }
+        },
+        videoId: videoId
+      })
+    });
+
+    if (playerResponse.ok) {
+      const data = await playerResponse.json();
+      const captions = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (captions && captions.length > 0) {
+        console.log('[YouTube要約] Innertube player APIからcaptionTracks取得');
+        return await fetchCaptionTrack(captions);
+      }
+    }
+  } catch (e) {
+    console.log('[YouTube要約] player API failed:', e.message);
+  }
+
+  return null;
+}
+
+// Parse transcript from innertube API response
+function parseInnertubeTranscript(data) {
+  try {
+    const actions = data?.actions;
+    if (!actions) return null;
+
+    for (const action of actions) {
+      const transcriptRenderer = action?.updateEngagementPanelAction?.content?.transcriptRenderer;
+      const body = transcriptRenderer?.content?.transcriptSearchPanelRenderer?.body;
+      const segments = body?.transcriptSegmentListRenderer?.initialSegments;
+
+      if (segments) {
+        return segments.map(seg => {
+          const segment = seg.transcriptSegmentRenderer;
+          const startMs = parseInt(segment.startMs || '0');
+          const text = segment.snippet?.runs?.map(r => r.text).join('') || '';
+          return {
+            time: formatTime(startMs / 1000),
+            seconds: startMs / 1000,
+            text: text.trim()
+          };
+        }).filter(item => item.text);
+      }
+    }
+  } catch (e) {
+    console.log('[YouTube要約] parseInnertubeTranscript error:', e.message);
+  }
+  return null;
+}
+
+// Method 5: Get transcript from the transcript panel UI
+async function getTranscriptFromPanel() {
+  // Try to open the transcript panel
+  const moreButton = document.querySelector('button[aria-label="その他の操作"]') ||
+                     document.querySelector('button[aria-label="More actions"]') ||
+                     document.querySelector('#button[aria-label*="more"]') ||
+                     document.querySelector('ytd-menu-renderer button');
+
+  if (!moreButton) {
+    console.log('[YouTube要約] More button not found');
+    return null;
+  }
+
+  // Click the more button to open menu
+  moreButton.click();
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  // Find and click "Show transcript" option
+  const menuItems = document.querySelectorAll('ytd-menu-service-item-renderer, tp-yt-paper-item');
+  let transcriptButton = null;
+
+  for (const item of menuItems) {
+    const text = item.textContent || '';
+    if (text.includes('文字起こし') || text.includes('Transcript') || text.includes('字幕')) {
+      transcriptButton = item;
+      break;
+    }
+  }
+
+  if (!transcriptButton) {
+    // Close the menu
+    document.body.click();
+    console.log('[YouTube要約] Transcript menu item not found');
+    return null;
+  }
+
+  transcriptButton.click();
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Extract transcript from the panel
+  const transcriptPanel = document.querySelector('ytd-transcript-segment-list-renderer, ytd-transcript-renderer');
+  if (!transcriptPanel) {
+    console.log('[YouTube要約] Transcript panel not found');
+    return null;
+  }
+
+  const segments = transcriptPanel.querySelectorAll('ytd-transcript-segment-renderer');
+  if (segments.length === 0) {
+    console.log('[YouTube要約] No transcript segments found');
+    return null;
+  }
+
+  const transcriptData = [];
+  segments.forEach(segment => {
+    const timeEl = segment.querySelector('.segment-timestamp');
+    const textEl = segment.querySelector('.segment-text');
+
+    if (timeEl && textEl) {
+      const timeText = timeEl.textContent.trim();
+      const text = textEl.textContent.trim();
+
+      // Parse time to seconds
+      const timeParts = timeText.split(':').map(Number);
+      let seconds = 0;
+      if (timeParts.length === 2) {
+        seconds = timeParts[0] * 60 + timeParts[1];
+      } else if (timeParts.length === 3) {
+        seconds = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
+      }
+
+      if (text) {
+        transcriptData.push({
+          time: timeText,
+          seconds: seconds,
+          text: text
+        });
+      }
+    }
+  });
+
+  return transcriptData;
 }
 
 // Method 1: Extract from page's embedded data (ytInitialPlayerResponse)
