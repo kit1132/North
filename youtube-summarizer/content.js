@@ -337,8 +337,8 @@ async function summarize() {
   }
 
   // Check API key
-  const result = await chrome.storage.sync.get(['claudeApiKey']);
-  if (!result.claudeApiKey) {
+  const result = await chrome.storage.sync.get(['apiKey', 'apiProvider']);
+  if (!result.apiKey) {
     contentEl.innerHTML = `
       <div class="yt-summarizer-error">
         <div class="yt-summarizer-error-icon">
@@ -368,8 +368,7 @@ async function summarize() {
 
     const response = await chrome.runtime.sendMessage({
       action: 'summarize',
-      transcript: transcript,
-      apiKey: result.claudeApiKey
+      transcript: transcript
     });
 
     if (!response || !response.success) {
@@ -524,21 +523,27 @@ async function getTranscriptData() {
     throw new Error('動画IDが見つかりません');
   }
 
-  try {
-    const data = await getTranscriptFromPage();
-    if (data) return data;
-  } catch (e) {
-    console.log('Method 1 failed, trying alternative methods...');
+  // Try multiple methods
+  const methods = [
+    { name: 'ページ埋め込みデータ', fn: () => getTranscriptFromPage() },
+    { name: 'YouTube API', fn: () => getTranscriptFromYouTubeAPI(videoId) },
+    { name: 'ページ再取得', fn: () => getTranscriptFromFetch(videoId) }
+  ];
+
+  for (const method of methods) {
+    try {
+      console.log(`[YouTube要約] ${method.name}で字幕を取得中...`);
+      const data = await method.fn();
+      if (data && data.length > 0) {
+        console.log(`[YouTube要約] ${method.name}で${data.length}件の字幕を取得しました`);
+        return data;
+      }
+    } catch (e) {
+      console.log(`[YouTube要約] ${method.name}失敗:`, e.message);
+    }
   }
 
-  try {
-    const data = await getTranscriptFromAPI(videoId);
-    if (data) return data;
-  } catch (e) {
-    console.log('Method 2 failed:', e.message);
-  }
-
-  throw new Error('この動画には字幕がありません');
+  throw new Error('この動画には字幕がありません。字幕が有効になっているか確認してください。');
 }
 
 // Fetch transcript as formatted string (for popup)
@@ -554,15 +559,24 @@ async function getTranscript() {
   return formattedTranscript;
 }
 
-// Method 1: Extract from page's embedded data
+// Method 1: Extract from page's embedded data (ytInitialPlayerResponse)
 async function getTranscriptFromPage() {
+  // Try to find ytInitialPlayerResponse in script tags
   const scripts = document.querySelectorAll('script');
   let playerResponse = null;
 
   for (const script of scripts) {
-    const content = script.textContent;
-    if (content.includes('ytInitialPlayerResponse')) {
-      const match = content.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
+    const content = script.textContent || '';
+
+    // Try different patterns
+    const patterns = [
+      /ytInitialPlayerResponse\s*=\s*(\{.+?\});(?:\s*var|<\/script)/s,
+      /var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\});/s,
+      /ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?"captions"[\s\S]*?\});/
+    ];
+
+    for (const pattern of patterns) {
+      const match = content.match(pattern);
       if (match) {
         try {
           playerResponse = JSON.parse(match[1]);
@@ -572,81 +586,108 @@ async function getTranscriptFromPage() {
         }
       }
     }
-  }
-
-  if (!playerResponse) {
-    playerResponse = await new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.textContent = `
-        window.postMessage({
-          type: 'YT_PLAYER_RESPONSE',
-          data: typeof ytInitialPlayerResponse !== 'undefined' ? ytInitialPlayerResponse : null
-        }, '*');
-      `;
-      document.documentElement.appendChild(script);
-      script.remove();
-
-      const handler = (event) => {
-        if (event.data && event.data.type === 'YT_PLAYER_RESPONSE') {
-          window.removeEventListener('message', handler);
-          resolve(event.data.data);
-        }
-      };
-      window.addEventListener('message', handler);
-
-      setTimeout(() => {
-        window.removeEventListener('message', handler);
-        resolve(null);
-      }, 2000);
-    });
+    if (playerResponse) break;
   }
 
   if (!playerResponse) {
     return null;
   }
 
+  return extractCaptionsFromResponse(playerResponse);
+}
+
+// Method 2: Get from YouTube's internal API
+async function getTranscriptFromYouTubeAPI(videoId) {
+  // Try to get player response from window object
+  const playerResponse = await new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.textContent = `
+      (function() {
+        try {
+          var data = null;
+          if (typeof ytInitialPlayerResponse !== 'undefined') {
+            data = ytInitialPlayerResponse;
+          } else if (typeof ytplayer !== 'undefined' && ytplayer.config) {
+            data = ytplayer.config.args.player_response ?
+              JSON.parse(ytplayer.config.args.player_response) : null;
+          }
+          window.postMessage({ type: 'YT_PLAYER_RESPONSE_V2', data: data }, '*');
+        } catch(e) {
+          window.postMessage({ type: 'YT_PLAYER_RESPONSE_V2', data: null, error: e.message }, '*');
+        }
+      })();
+    `;
+    document.documentElement.appendChild(script);
+    script.remove();
+
+    const handler = (event) => {
+      if (event.data && event.data.type === 'YT_PLAYER_RESPONSE_V2') {
+        window.removeEventListener('message', handler);
+        resolve(event.data.data);
+      }
+    };
+    window.addEventListener('message', handler);
+
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      resolve(null);
+    }, 3000);
+  });
+
+  if (!playerResponse) {
+    return null;
+  }
+
+  return extractCaptionsFromResponse(playerResponse);
+}
+
+// Method 3: Fetch the page and extract captions
+async function getTranscriptFromFetch(videoId) {
+  const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    headers: {
+      'Accept-Language': 'ja,en;q=0.9'
+    }
+  });
+  const html = await response.text();
+
+  // Try to find captionTracks in the HTML
+  const patterns = [
+    /"captionTracks":\s*(\[[\s\S]*?\])(?=,\s*")/,
+    /"captions":\s*\{[\s\S]*?"captionTracks":\s*(\[[\s\S]*?\])/
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match) {
+      try {
+        const captionTracks = JSON.parse(match[1]);
+        if (captionTracks && captionTracks.length > 0) {
+          return await fetchCaptionTrack(captionTracks);
+        }
+      } catch (e) {
+        console.log('[YouTube要約] キャプショントラックのパース失敗:', e.message);
+      }
+    }
+  }
+
+  return null;
+}
+
+// Extract captions from player response
+async function extractCaptionsFromResponse(playerResponse) {
   const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if (!captions || captions.length === 0) {
     return null;
   }
 
-  let selectedTrack = captions.find(t => t.languageCode === 'ja') ||
-                      captions.find(t => t.languageCode === 'ja-JP') ||
-                      captions.find(t => t.kind === 'asr') ||
-                      captions[0];
-
-  if (!selectedTrack || !selectedTrack.baseUrl) {
-    return null;
-  }
-
-  const response = await fetch(selectedTrack.baseUrl);
-  const xml = await response.text();
-
-  return parseTranscriptXML(xml);
+  return await fetchCaptionTrack(captions);
 }
 
-// Method 2: Get transcript via YouTube's timedtext API
-async function getTranscriptFromAPI(videoId) {
-  const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
-  const html = await response.text();
-
-  const captionMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
-  if (!captionMatch) {
-    return null;
-  }
-
-  let captionTracks;
-  try {
-    captionTracks = JSON.parse(captionMatch[1]);
-  } catch (e) {
-    return null;
-  }
-
-  if (!captionTracks || captionTracks.length === 0) {
-    return null;
-  }
-
-  let selectedTrack = captionTracks.find(t => t.languageCode === 'ja') ||
+// Fetch caption track and parse
+async function fetchCaptionTrack(captionTracks) {
+  // Prefer: Japanese > Auto-generated > First available
+  let selectedTrack = captionTracks.find(t => t.languageCode === 'ja' && t.kind !== 'asr') ||
+                      captionTracks.find(t => t.languageCode === 'ja') ||
                       captionTracks.find(t => t.languageCode === 'ja-JP') ||
                       captionTracks.find(t => t.kind === 'asr') ||
                       captionTracks[0];
@@ -655,8 +696,10 @@ async function getTranscriptFromAPI(videoId) {
     return null;
   }
 
-  const transcriptResponse = await fetch(selectedTrack.baseUrl);
-  const xml = await transcriptResponse.text();
+  console.log(`[YouTube要約] 字幕言語: ${selectedTrack.languageCode}, 種類: ${selectedTrack.kind || 'manual'}`);
+
+  const response = await fetch(selectedTrack.baseUrl);
+  const xml = await response.text();
 
   return parseTranscriptXML(xml);
 }
@@ -668,20 +711,29 @@ function parseTranscriptXML(xml) {
   const textElements = doc.querySelectorAll('text');
 
   if (textElements.length === 0) {
+    // Check for parse error
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) {
+      throw new Error('字幕データの形式が不正です');
+    }
     throw new Error('字幕データが見つかりません');
   }
 
   const transcriptParts = [];
 
   textElements.forEach((element) => {
-    const start = parseFloat(element.getAttribute('start'));
-    const text = element.textContent
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"')
+    const start = parseFloat(element.getAttribute('start') || '0');
+    let text = element.textContent || '';
+
+    // Decode HTML entities
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    text = textarea.value;
+
+    // Clean up the text
+    text = text
       .replace(/\n/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
 
     if (text) {

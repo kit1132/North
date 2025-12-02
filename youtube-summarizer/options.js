@@ -1,20 +1,75 @@
 // DOM elements
 const form = document.getElementById('options-form');
+const apiProviderSelect = document.getElementById('api-provider');
 const apiKeyInput = document.getElementById('api-key');
 const toggleKeyBtn = document.getElementById('toggle-key');
+const verifyBtn = document.getElementById('verify-btn');
+const saveBtn = document.getElementById('save-btn');
 const notification = document.getElementById('notification');
+const apiStatus = document.getElementById('api-status');
+const apiHint = document.getElementById('api-hint');
+const apiLink = document.getElementById('api-link');
+const apiInfo = document.getElementById('api-info');
 
-// Load saved API key on page load
+// API provider configurations
+const API_CONFIGS = {
+  claude: {
+    name: 'Claude',
+    placeholder: 'sk-ant-api03-...',
+    hint: 'Anthropic Console',
+    url: 'https://console.anthropic.com/',
+    info: '<strong>Claude:</strong> 高品質な日本語要約に最適。claude-sonnet-4-20250514を使用。',
+    validatePrefix: (key) => key.startsWith('sk-ant-')
+  },
+  openai: {
+    name: 'OpenAI',
+    placeholder: 'sk-...',
+    hint: 'OpenAI Platform',
+    url: 'https://platform.openai.com/api-keys',
+    info: '<strong>OpenAI:</strong> GPT-4oを使用。高速で安定した要約を生成。',
+    validatePrefix: (key) => key.startsWith('sk-')
+  },
+  gemini: {
+    name: 'Gemini',
+    placeholder: 'AIza...',
+    hint: 'Google AI Studio',
+    url: 'https://aistudio.google.com/app/apikey',
+    info: '<strong>Gemini:</strong> Gemini 1.5 Proを使用。長い動画にも対応。',
+    validatePrefix: (key) => key.startsWith('AIza')
+  }
+};
+
+// Load saved settings on page load
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    const result = await chrome.storage.sync.get(['claudeApiKey']);
-    if (result.claudeApiKey) {
-      apiKeyInput.value = result.claudeApiKey;
+    const result = await chrome.storage.sync.get(['apiProvider', 'apiKey']);
+    if (result.apiProvider) {
+      apiProviderSelect.value = result.apiProvider;
     }
+    if (result.apiKey) {
+      apiKeyInput.value = result.apiKey;
+    }
+    updateProviderUI();
   } catch (error) {
-    console.error('Failed to load API key:', error);
+    console.error('Failed to load settings:', error);
   }
 });
+
+// Update UI when provider changes
+apiProviderSelect.addEventListener('change', () => {
+  updateProviderUI();
+  clearStatus();
+});
+
+function updateProviderUI() {
+  const provider = apiProviderSelect.value;
+  const config = API_CONFIGS[provider];
+
+  apiKeyInput.placeholder = config.placeholder;
+  apiLink.textContent = config.hint;
+  apiLink.href = config.url;
+  apiInfo.innerHTML = config.info;
+}
 
 // Toggle API key visibility
 toggleKeyBtn.addEventListener('click', () => {
@@ -41,27 +96,123 @@ function showNotification(message, type = 'success') {
   }, 3000);
 }
 
-// Save API key
+// Show status
+function showStatus(message, type) {
+  let icon = '';
+  if (type === 'success') {
+    icon = `<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+    </svg>`;
+  } else if (type === 'error') {
+    icon = `<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="15" y1="9" x2="9" y2="15"></line>
+      <line x1="9" y1="9" x2="15" y2="15"></line>
+    </svg>`;
+  } else if (type === 'verifying') {
+    icon = `<div class="spinner"></div>`;
+  }
+
+  apiStatus.innerHTML = `<div class="status ${type}">${icon}<span>${message}</span></div>`;
+}
+
+function clearStatus() {
+  apiStatus.innerHTML = '';
+}
+
+// Verify API key
+verifyBtn.addEventListener('click', async () => {
+  const provider = apiProviderSelect.value;
+  const apiKey = apiKeyInput.value.trim();
+  const config = API_CONFIGS[provider];
+
+  if (!apiKey) {
+    showStatus('APIキーを入力してください', 'error');
+    return;
+  }
+
+  if (!config.validatePrefix(apiKey)) {
+    showStatus(`有効な${config.name} APIキーを入力してください`, 'error');
+    return;
+  }
+
+  verifyBtn.disabled = true;
+  showStatus('APIキーを検証中...', 'verifying');
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'verifyApiKey',
+      provider: provider,
+      apiKey: apiKey
+    });
+
+    if (response && response.success) {
+      showStatus('APIキーは有効です', 'success');
+    } else {
+      showStatus(response?.error || 'APIキーが無効です', 'error');
+    }
+  } catch (error) {
+    showStatus('検証に失敗しました: ' + error.message, 'error');
+  } finally {
+    verifyBtn.disabled = false;
+  }
+});
+
+// Save settings
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
+  const provider = apiProviderSelect.value;
   const apiKey = apiKeyInput.value.trim();
+  const config = API_CONFIGS[provider];
 
   if (!apiKey) {
     showNotification('APIキーを入力してください', 'error');
     return;
   }
 
-  if (!apiKey.startsWith('sk-ant-')) {
-    showNotification('有効なClaude APIキーを入力してください', 'error');
+  if (!config.validatePrefix(apiKey)) {
+    showNotification(`有効な${config.name} APIキーを入力してください`, 'error');
     return;
   }
 
+  saveBtn.disabled = true;
+
   try {
-    await chrome.storage.sync.set({ claudeApiKey: apiKey });
+    // Verify before saving
+    showStatus('APIキーを検証中...', 'verifying');
+
+    const verifyResponse = await chrome.runtime.sendMessage({
+      action: 'verifyApiKey',
+      provider: provider,
+      apiKey: apiKey
+    });
+
+    if (!verifyResponse || !verifyResponse.success) {
+      showStatus(verifyResponse?.error || 'APIキーが無効です', 'error');
+      showNotification('APIキーが無効です。確認してください。', 'error');
+      return;
+    }
+
+    // Save to storage
+    await chrome.storage.sync.set({
+      apiProvider: provider,
+      apiKey: apiKey
+    });
+
+    showStatus('APIキーは有効です', 'success');
     showNotification('設定を保存しました', 'success');
+
+    // Close the options page after a short delay
+    setTimeout(() => {
+      window.close();
+    }, 1500);
+
   } catch (error) {
-    console.error('Failed to save API key:', error);
+    console.error('Failed to save settings:', error);
     showNotification('保存に失敗しました', 'error');
+  } finally {
+    saveBtn.disabled = false;
   }
 });

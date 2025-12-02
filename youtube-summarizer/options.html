@@ -70,6 +70,23 @@
       font-size: 14px;
     }
 
+    select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      background: white;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: #6B5CE7;
+      box-shadow: 0 0 0 3px rgba(107, 92, 231, 0.1);
+    }
+
     .input-wrapper {
       position: relative;
     }
@@ -121,26 +138,107 @@
       text-decoration: underline;
     }
 
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
     .btn {
-      width: 100%;
+      flex: 1;
       padding: 14px 20px;
-      background: linear-gradient(135deg, #6B5CE7, #5848C2);
-      color: white;
       border: none;
       border-radius: 8px;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
 
-    .btn:hover {
+    .btn-primary {
+      background: linear-gradient(135deg, #6B5CE7, #5848C2);
+      color: white;
+    }
+
+    .btn-primary:hover {
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(107, 92, 231, 0.4);
     }
 
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+
+    .btn-verify {
+      background: #10B981;
+      color: white;
+    }
+
+    .btn-verify:hover {
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+
     .btn:active {
       transform: translateY(0);
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    .status.success {
+      background: #D1FAE5;
+      color: #065F46;
+    }
+
+    .status.error {
+      background: #FEE2E2;
+      color: #991B1B;
+    }
+
+    .status.verifying {
+      background: #FEF3C7;
+      color: #92400E;
+    }
+
+    .status-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #92400E;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
 
     .notification {
@@ -171,6 +269,19 @@
       background: #EF4444;
       color: white;
     }
+
+    .api-info {
+      background: #F3F4F6;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+      font-size: 13px;
+      color: #4B5563;
+    }
+
+    .api-info strong {
+      color: #1F2937;
+    }
   </style>
 </head>
 <body>
@@ -179,13 +290,22 @@
       <div class="logo">Y</div>
       YouTube要約 - 設定
     </h1>
-    <p class="subtitle">Claude APIを使用して動画を要約します</p>
+    <p class="subtitle">AIを使用して動画を要約します</p>
 
     <form id="options-form">
       <div class="form-group">
-        <label for="api-key">Claude API キー</label>
+        <label for="api-provider">AI プロバイダー</label>
+        <select id="api-provider">
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="openai">ChatGPT (OpenAI)</option>
+          <option value="gemini">Gemini (Google)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="api-key">API キー</label>
         <div class="input-wrapper">
-          <input type="password" id="api-key" placeholder="sk-ant-api03-..." autocomplete="off">
+          <input type="password" id="api-key" placeholder="APIキーを入力..." autocomplete="off">
           <button type="button" class="toggle-visibility" id="toggle-key">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -193,12 +313,34 @@
             </svg>
           </button>
         </div>
-        <p class="hint">
-          APIキーは <a href="https://console.anthropic.com/" target="_blank">Anthropic Console</a> で取得できます
+        <p class="hint" id="api-hint">
+          APIキーは <a href="https://console.anthropic.com/" target="_blank" id="api-link">Anthropic Console</a> で取得できます
         </p>
       </div>
 
-      <button type="submit" class="btn">保存</button>
+      <div id="api-status"></div>
+
+      <div class="api-info" id="api-info">
+        <strong>Claude:</strong> 高品質な日本語要約に最適。claude-sonnet-4-20250514を使用。
+      </div>
+
+      <div class="btn-group">
+        <button type="button" class="btn btn-verify" id="verify-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          検証
+        </button>
+        <button type="submit" class="btn btn-primary" id="save-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          保存して閉じる
+        </button>
+      </div>
     </form>
   </div>
 
