@@ -4,6 +4,52 @@ let transcriptData = [];
 let currentSummary = '';
 let currentTabId = null;
 
+// Theme Management
+async function initTheme() {
+  try {
+    const result = await chrome.storage.sync.get(['themeMode']);
+    applyTheme(result.themeMode || 'system');
+  } catch (error) {
+    console.error('Failed to load theme:', error);
+    applyTheme('system');
+  }
+}
+
+function applyTheme(mode) {
+  const html = document.documentElement;
+
+  if (mode === 'dark') {
+    html.setAttribute('data-theme', 'dark');
+  } else if (mode === 'light') {
+    html.removeAttribute('data-theme');
+  } else {
+    // System mode - check prefers-color-scheme
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      html.setAttribute('data-theme', 'dark');
+    } else {
+      html.removeAttribute('data-theme');
+    }
+  }
+}
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async () => {
+  const result = await chrome.storage.sync.get(['themeMode']);
+  if (!result.themeMode || result.themeMode === 'system') {
+    applyTheme('system');
+  }
+});
+
+// Listen for theme changes from settings
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'sync' && changes.themeMode) {
+    applyTheme(changes.themeMode.newValue || 'system');
+  }
+});
+
+// Initialize theme immediately
+initTheme();
+
 // DOM Elements
 const notYoutubeEl = document.getElementById('not-youtube');
 const mainContentEl = document.getElementById('main-content');

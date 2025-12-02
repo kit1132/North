@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube要約",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "YouTubeの動画トランスクリプトをAI（Claude/OpenAI/Gemini）で要約するChrome拡張機能",
   "permissions": [
     "activeTab",

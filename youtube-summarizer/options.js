@@ -1,5 +1,6 @@
 // DOM elements
 const form = document.getElementById('options-form');
+const themeModeSelect = document.getElementById('theme-mode');
 const apiProviderSelect = document.getElementById('api-provider');
 const apiKeyInput = document.getElementById('api-key');
 const toggleKeyBtn = document.getElementById('toggle-key');
@@ -42,7 +43,10 @@ const API_CONFIGS = {
 // Load saved settings on page load
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    const result = await chrome.storage.sync.get(['apiProvider', 'apiKey']);
+    const result = await chrome.storage.sync.get(['apiProvider', 'apiKey', 'themeMode']);
+    if (result.themeMode) {
+      themeModeSelect.value = result.themeMode;
+    }
     if (result.apiProvider) {
       apiProviderSelect.value = result.apiProvider;
     }
@@ -52,6 +56,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateProviderUI();
   } catch (error) {
     console.error('Failed to load settings:', error);
+  }
+});
+
+// Theme mode change - save immediately
+themeModeSelect.addEventListener('change', async () => {
+  const themeMode = themeModeSelect.value;
+  try {
+    await chrome.storage.sync.set({ themeMode });
+    showNotification('テーマを変更しました', 'success');
+  } catch (error) {
+    console.error('Failed to save theme:', error);
   }
 });
 
