@@ -388,6 +388,26 @@ function toggleSettings() {
 
 // ==================== Saved Groups (Bookmarks) ====================
 
+// Protected bookmark folder IDs (Chrome's built-in folders)
+const PROTECTED_BOOKMARK_IDS = ['0', '1', '2', '3']; // Root, Bookmarks Bar, Other Bookmarks, Mobile Bookmarks
+
+// Folder names that indicate tab group storage (case-insensitive)
+const TAB_GROUP_FOLDER_PATTERNS = [
+  'tab group',
+  'tabgroup',
+  'saved tabs',
+  'acid tabs',
+  'タブグループ',
+  '保存済みタブ'
+];
+
+// Check if a folder name looks like a tab group folder
+function isTabGroupFolder(title) {
+  if (!title) return false;
+  const lowerTitle = title.toLowerCase();
+  return TAB_GROUP_FOLDER_PATTERNS.some(pattern => lowerTitle.includes(pattern));
+}
+
 // Find saved tab groups in bookmarks
 async function findSavedTabGroups() {
   try {
@@ -395,28 +415,40 @@ async function findSavedTabGroups() {
     const savedGroups = [];
 
     // Recursive function to find tab group folders
-    function searchBookmarks(nodes, depth = 0) {
+    function searchBookmarks(nodes, parentIsTabGroupFolder = false, depth = 0) {
       for (const node of nodes) {
-        // Look for folders that might be saved tab groups
-        // Chrome saves tab groups in a special format
+        // Skip protected folders at root level
+        if (depth <= 1 && PROTECTED_BOOKMARK_IDS.includes(node.id)) {
+          // But continue searching inside them
+          if (node.children) {
+            searchBookmarks(node.children, false, depth + 1);
+          }
+          continue;
+        }
+
         if (node.children) {
-          // Check if this looks like a saved tab group folder
-          // Saved tab groups typically have a specific structure
           const hasUrls = node.children.some(child => child.url);
           const isFolder = !node.url;
+          const isTGFolder = isTabGroupFolder(node.title);
 
+          // Include if:
+          // 1. This folder's name matches tab group patterns and has URLs
+          // 2. Parent is a tab group folder (like "Tab Groups") and this has URLs
           if (isFolder && hasUrls && node.title) {
-            // This might be a saved tab group
-            savedGroups.push({
-              id: node.id,
-              title: node.title,
-              children: node.children,
-              tabCount: node.children.filter(c => c.url).length
-            });
+            if (isTGFolder || parentIsTabGroupFolder) {
+              savedGroups.push({
+                id: node.id,
+                title: node.title,
+                children: node.children,
+                tabCount: node.children.filter(c => c.url).length,
+                isContainer: isTGFolder && !parentIsTabGroupFolder
+              });
+            }
           }
 
           // Continue searching in subfolders
-          searchBookmarks(node.children, depth + 1);
+          // Mark children as being inside a tab group folder if this folder matches
+          searchBookmarks(node.children, isTGFolder || parentIsTabGroupFolder, depth + 1);
         }
       }
     }
