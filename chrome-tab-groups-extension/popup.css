@@ -82,6 +82,47 @@ h2 {
   border-color: #1a73e8;
 }
 
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  background: white;
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: #f0f0f0;
+}
+
+.tab-btn.active {
+  background: #1a73e8;
+  color: white;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
 .stats {
   text-align: center;
   font-size: 24px;
@@ -315,3 +356,108 @@ h2 {
 .border-purple { border-left-color: #a142f4; }
 .border-cyan { border-left-color: #007b83; }
 .border-orange { border-left-color: #e8710a; }
+
+/* Session items */
+.session-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 4px solid #6c757d;
+  transition: background 0.2s ease;
+}
+
+.session-item:hover {
+  background: #f0f0f0;
+}
+
+.session-item.session-tab {
+  border-left-color: #1a73e8;
+}
+
+.session-item.session-window {
+  border-left-color: #28a745;
+}
+
+.session-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.session-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.session-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-title {
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.session-url {
+  font-size: 11px;
+  color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.session-type {
+  font-size: 10px;
+  color: #666;
+  background: #e9ecef;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.session-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.session-actions .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.btn-success {
+  background: #28a745;
+  color: white;
+}
+
+.btn-success:hover {
+  background: #218838;
+}
+
+/* Info box */
+.info-box {
+  margin-top: 12px;
+  padding: 10px;
+  background: #fff3cd;
+  border-radius: 6px;
+  border-left: 4px solid #ffc107;
+}
+
+.info-box p {
+  font-size: 12px;
+  color: #856404;
+  margin: 0;
+}

@@ -1,4 +1,4 @@
-// DOM elements
+// DOM elements - Current Groups Tab
 const groupCountEl = document.getElementById('groupCount');
 const groupListEl = document.getElementById('groupList');
 const emptyMessageEl = document.getElementById('emptyMessage');
@@ -16,9 +16,22 @@ const settingsToggleBtn = document.getElementById('settingsToggle');
 const settingsPanelEl = document.getElementById('settingsPanel');
 const languageSelectEl = document.getElementById('languageSelect');
 
+// DOM elements - History Tab
+const sessionCountEl = document.getElementById('sessionCount');
+const sessionListEl = document.getElementById('sessionList');
+const emptySessionMessageEl = document.getElementById('emptySessionMessage');
+const clearHistoryBtn = document.getElementById('clearHistory');
+const refreshHistoryBtn = document.getElementById('refreshHistory');
+
+// DOM elements - Tab navigation
+const tabBtns = document.querySelectorAll('.tab-btn');
+const currentTabEl = document.getElementById('currentTab');
+const historyTabEl = document.getElementById('historyTab');
+
 // State
 let selectedGroups = new Set();
 let groupsData = [];
+let sessionsData = [];
 
 // Show status message
 function showStatus(message, isError = false) {
@@ -27,6 +40,27 @@ function showStatus(message, isError = false) {
   setTimeout(() => {
     statusEl.className = 'status';
   }, 3000);
+}
+
+// Tab navigation
+function switchTab(tabName) {
+  tabBtns.forEach(btn => {
+    if (btn.dataset.tab === tabName) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  if (tabName === 'current') {
+    currentTabEl.classList.add('active');
+    historyTabEl.classList.remove('active');
+    loadGroups();
+  } else {
+    currentTabEl.classList.remove('active');
+    historyTabEl.classList.add('active');
+    loadSessions();
+  }
 }
 
 // Update selection UI
@@ -337,7 +371,151 @@ function toggleSettings() {
   }
 }
 
-// Event listeners
+// ==================== Sessions (History Tab) ====================
+
+// Get recently closed sessions
+async function getRecentlyClosed() {
+  try {
+    const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 25 });
+    return sessions;
+  } catch (error) {
+    console.error('Failed to get recently closed sessions:', error);
+    return [];
+  }
+}
+
+// Restore a session (tab or window)
+async function restoreSession(sessionId) {
+  try {
+    await chrome.sessions.restore(sessionId);
+    return true;
+  } catch (error) {
+    console.error('Failed to restore session:', error);
+    return false;
+  }
+}
+
+// Render a session item
+function renderSessionItem(session) {
+  const item = document.createElement('div');
+
+  if (session.tab) {
+    // Single tab
+    const tab = session.tab;
+    item.className = 'session-item session-tab';
+
+    const faviconUrl = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect fill="%23ddd" width="16" height="16" rx="2"/></svg>';
+
+    item.innerHTML = `
+      <div class="session-icon">
+        <img src="${faviconUrl}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><rect fill=%22%23ddd%22 width=%2216%22 height=%2216%22 rx=%222%22/></svg>'">
+      </div>
+      <div class="session-info">
+        <span class="session-title" title="${tab.title || ''}">${tab.title || t('unnamed')}</span>
+        <span class="session-url" title="${tab.url || ''}">${tab.url || ''}</span>
+      </div>
+      <span class="session-type">${t('tab')}</span>
+      <div class="session-actions">
+        <button class="btn btn-success btn-sm restore-btn">${t('restore')}</button>
+      </div>
+    `;
+
+    item.querySelector('.restore-btn').addEventListener('click', async () => {
+      const success = await restoreSession(session.tab.sessionId);
+      if (success) {
+        showStatus(t('restored'));
+        loadSessions();
+      } else {
+        showStatus(t('restoreFailed'), true);
+      }
+    });
+  } else if (session.window) {
+    // Window with multiple tabs
+    const win = session.window;
+    const tabCount = win.tabs ? win.tabs.length : 0;
+    item.className = 'session-item session-window';
+
+    item.innerHTML = `
+      <div class="session-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#28a745">
+          <rect x="1" y="3" width="14" height="10" rx="1" stroke="#28a745" stroke-width="1.5" fill="none"/>
+          <rect x="1" y="3" width="14" height="3" fill="#28a745"/>
+        </svg>
+      </div>
+      <div class="session-info">
+        <span class="session-title">${t('window')}</span>
+        <span class="session-url">${t('tabsCount', { count: tabCount })}</span>
+      </div>
+      <span class="session-type">${t('window')}</span>
+      <div class="session-actions">
+        <button class="btn btn-success btn-sm restore-btn">${t('restore')}</button>
+      </div>
+    `;
+
+    item.querySelector('.restore-btn').addEventListener('click', async () => {
+      const success = await restoreSession(session.window.sessionId);
+      if (success) {
+        showStatus(t('restored'));
+        loadSessions();
+      } else {
+        showStatus(t('restoreFailed'), true);
+      }
+    });
+  }
+
+  return item;
+}
+
+// Load and display recently closed sessions
+async function loadSessions() {
+  const sessions = await getRecentlyClosed();
+  sessionsData = sessions;
+
+  sessionCountEl.textContent = sessions.length;
+  sessionListEl.innerHTML = '';
+
+  if (sessions.length === 0) {
+    emptySessionMessageEl.style.display = 'block';
+    sessionListEl.style.display = 'none';
+  } else {
+    emptySessionMessageEl.style.display = 'none';
+    sessionListEl.style.display = 'flex';
+
+    for (const session of sessions) {
+      const item = renderSessionItem(session);
+      if (item.innerHTML) {
+        sessionListEl.appendChild(item);
+      }
+    }
+  }
+}
+
+// Clear browsing history (this will clear recently closed tabs)
+async function clearBrowsingHistory() {
+  if (!confirm(t('confirmClearHistory'))) {
+    return;
+  }
+
+  try {
+    // Open Chrome's clear browsing data page
+    await chrome.tabs.create({ url: 'chrome://settings/clearBrowserData' });
+    showStatus(t('historyCleared'));
+  } catch (error) {
+    console.error('Failed to open clear history page:', error);
+    showStatus(t('historyClearFailed'), true);
+  }
+}
+
+// ==================== Event Listeners ====================
+
+// Tab navigation
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    switchTab(btn.dataset.tab);
+  });
+});
+
+// Current Groups Tab
 deleteAllBtn.addEventListener('click', deleteAllGroups);
 ungroupAllBtn.addEventListener('click', ungroupAllTabs);
 refreshBtn.addEventListener('click', () => {
@@ -348,12 +526,26 @@ selectAllBtn.addEventListener('click', selectAllGroups);
 deselectAllBtn.addEventListener('click', deselectAllGroups);
 deleteSelectedBtn.addEventListener('click', deleteSelectedGroups);
 ungroupSelectedBtn.addEventListener('click', ungroupSelectedGroups);
+
+// History Tab
+clearHistoryBtn.addEventListener('click', clearBrowsingHistory);
+refreshHistoryBtn.addEventListener('click', () => {
+  loadSessions();
+  showStatus(t('refreshed'));
+});
+
+// Settings
 settingsToggleBtn.addEventListener('click', toggleSettings);
 
 // Language change event
 languageSelectEl.addEventListener('change', (e) => {
   setLanguage(e.target.value);
-  loadGroups(); // Reload to update dynamic content
+  // Reload current tab content
+  if (currentTabEl.classList.contains('active')) {
+    loadGroups();
+  } else {
+    loadSessions();
+  }
 });
 
 // Initial load

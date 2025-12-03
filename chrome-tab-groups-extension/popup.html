@@ -29,46 +29,85 @@
       </div>
     </div>
 
-    <div class="stats">
-      <span id="groupCount">0</span> <span data-i18n="groups">グループ</span>
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="current" data-i18n="currentGroups">現在のグループ</button>
+      <button class="tab-btn" data-tab="history" data-i18n="recentlyClosed">最近閉じた履歴</button>
     </div>
 
-    <!-- Selection Actions -->
-    <div id="selectionActions" class="selection-actions" style="display: none;">
-      <span id="selectedCount">0</span> <span data-i18n="selected">選択中</span>
-      <div class="selection-buttons">
-        <button id="deleteSelected" class="btn btn-danger btn-sm" data-i18n="deleteSelected">選択を削除</button>
-        <button id="ungroupSelected" class="btn btn-warning btn-sm" data-i18n="ungroupSelected">選択を解除</button>
+    <!-- Current Groups Tab -->
+    <div id="currentTab" class="tab-content active">
+      <div class="stats">
+        <span id="groupCount">0</span> <span data-i18n="groups">グループ</span>
       </div>
-    </div>
 
-    <div class="actions">
-      <button id="deleteAllGroups" class="btn btn-danger" data-i18n="deleteAll">
-        全グループを削除
-      </button>
-      <button id="ungroupAllTabs" class="btn btn-warning" data-i18n="ungroupAll">
-        全グループを解除（タブは保持）
-      </button>
-      <div class="action-row">
-        <button id="selectAll" class="btn btn-secondary btn-half" data-i18n="selectAll">
-          全選択
+      <!-- Selection Actions -->
+      <div id="selectionActions" class="selection-actions" style="display: none;">
+        <span id="selectedCount">0</span> <span data-i18n="selected">選択中</span>
+        <div class="selection-buttons">
+          <button id="deleteSelected" class="btn btn-danger btn-sm" data-i18n="deleteSelected">選択を削除</button>
+          <button id="ungroupSelected" class="btn btn-warning btn-sm" data-i18n="ungroupSelected">選択を解除</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="deleteAllGroups" class="btn btn-danger" data-i18n="deleteAll">
+          全グループを削除
         </button>
-        <button id="deselectAll" class="btn btn-secondary btn-half" data-i18n="deselectAll">
-          選択解除
+        <button id="ungroupAllTabs" class="btn btn-warning" data-i18n="ungroupAll">
+          全グループを解除（タブは保持）
+        </button>
+        <div class="action-row">
+          <button id="selectAll" class="btn btn-secondary btn-half" data-i18n="selectAll">
+            全選択
+          </button>
+          <button id="deselectAll" class="btn btn-secondary btn-half" data-i18n="deselectAll">
+            選択解除
+          </button>
+        </div>
+        <button id="refreshList" class="btn btn-secondary" data-i18n="refresh">
+          更新
         </button>
       </div>
-      <button id="refreshList" class="btn btn-secondary" data-i18n="refresh">
-        更新
-      </button>
+
+      <div class="group-list-container">
+        <h2 data-i18n="groupList">グループ一覧</h2>
+        <div id="groupList" class="group-list">
+          <!-- グループがここに表示される -->
+        </div>
+        <div id="emptyMessage" class="empty-message" style="display: none;" data-i18n="noGroups">
+          タブグループはありません
+        </div>
+      </div>
     </div>
 
-    <div class="group-list-container">
-      <h2 data-i18n="groupList">グループ一覧</h2>
-      <div id="groupList" class="group-list">
-        <!-- グループがここに表示される -->
+    <!-- History Tab -->
+    <div id="historyTab" class="tab-content">
+      <div class="stats">
+        <span id="sessionCount">0</span> <span data-i18n="sessions">セッション</span>
       </div>
-      <div id="emptyMessage" class="empty-message" style="display: none;" data-i18n="noGroups">
-        タブグループはありません
+
+      <div class="actions">
+        <button id="clearHistory" class="btn btn-danger" data-i18n="clearHistory">
+          閲覧履歴をクリア
+        </button>
+        <button id="refreshHistory" class="btn btn-secondary" data-i18n="refresh">
+          更新
+        </button>
+      </div>
+
+      <div class="group-list-container">
+        <h2 data-i18n="recentlyClosedList">最近閉じたタブ/ウィンドウ</h2>
+        <div id="sessionList" class="group-list">
+          <!-- セッションがここに表示される -->
+        </div>
+        <div id="emptySessionMessage" class="empty-message" style="display: none;" data-i18n="noSessions">
+          最近閉じたセッションはありません
+        </div>
+      </div>
+
+      <div class="info-box">
+        <p data-i18n="historyNote">※ Chromeの履歴をクリアすると、最近閉じたタブの履歴も削除されます。</p>
       </div>
     </div>
 
