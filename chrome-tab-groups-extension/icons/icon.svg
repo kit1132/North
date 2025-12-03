@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#1a73e8"/>
+
+  <!-- Tab group representation - 3 stacked rectangles -->
+  <rect x="28" y="35" width="72" height="16" rx="4" fill="#ffffff"/>
+  <rect x="28" y="56" width="72" height="16" rx="4" fill="#ffffff" opacity="0.8"/>
+  <rect x="28" y="77" width="72" height="16" rx="4" fill="#ffffff" opacity="0.6"/>
+
+  <!-- X mark for deletion -->
+  <circle cx="96" cy="96" r="24" fill="#dc3545"/>
+  <path d="M86 86 L106 106 M106 86 L86 106" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+</svg>

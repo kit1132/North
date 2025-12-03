@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tab Groups Cleaner</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Tab Groups Cleaner</h1>
+
+    <div class="stats">
+      <span id="groupCount">0</span> グループ
+    </div>
+
+    <div class="actions">
+      <button id="deleteAllGroups" class="btn btn-danger">
+        全グループを削除
+      </button>
+      <button id="ungroupAllTabs" class="btn btn-warning">
+        全グループを解除（タブは保持）
+      </button>
+      <button id="refreshList" class="btn btn-secondary">
+        更新
+      </button>
+    </div>
+
+    <div class="group-list-container">
+      <h2>グループ一覧</h2>
+      <div id="groupList" class="group-list">
+        <!-- グループがここに表示される -->
+      </div>
+      <div id="emptyMessage" class="empty-message" style="display: none;">
+        タブグループはありません
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
