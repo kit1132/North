@@ -480,7 +480,7 @@ async function verifyApiKey(provider, apiKey) {
 // 本番環境ではサーバー経由での呼び出しが推奨されています。
 // ----------------------------------------------------------------------------
 async function callClaudeAPI(prompt, apiKey) {
-  const response = await fetch(API_CONFIGS.claude.url, {
+  const response = await fetchWithRetry(API_CONFIGS.claude.url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -550,7 +550,7 @@ async function verifyClaudeKey(apiKey) {
 // - ボディ: model, max_tokens, messages 配列（Claude と似た形式）
 // ----------------------------------------------------------------------------
 async function callOpenAIAPI(prompt, apiKey) {
-  const response = await fetch(API_CONFIGS.openai.url, {
+  const response = await fetchWithRetry(API_CONFIGS.openai.url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -614,7 +614,7 @@ async function verifyOpenAIKey(apiKey) {
 // ----------------------------------------------------------------------------
 async function callGeminiAPI(prompt, apiKey) {
   const url = `${API_CONFIGS.gemini.url}?key=${apiKey}`;
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -687,4 +687,100 @@ async function handleAPIError(response, provider) {
   }
 
   return new Error(`${provider} error (${response.status}): ${errorData.error?.message || 'Unknown error'}`);
+}
+
+// ============================================================================
+// リトライ機能
+// ============================================================================
+// ネットワークエラーや一時的なサーバーエラー時に自動リトライします。
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// リトライ設定
+// ----------------------------------------------------------------------------
+const RETRY_CONFIG = {
+  maxRetries: 3,           // 最大リトライ回数
+  baseDelay: 1000,         // 基本待機時間（ミリ秒）
+  maxDelay: 10000,         // 最大待機時間（ミリ秒）
+  retryableStatuses: [429, 500, 502, 503, 504]  // リトライ対象のステータスコード
+};
+
+// ----------------------------------------------------------------------------
+// fetchWithRetry - リトライ付きfetch
+// ----------------------------------------------------------------------------
+// ネットワークエラーや一時的なサーバーエラーが発生した場合、
+// 指数バックオフで自動的にリトライします。
+//
+// 引数:
+//   url     - リクエストURL
+//   options - fetch オプション
+//   config  - リトライ設定（オプション）
+//
+// 戻り値: Response オブジェクト
+// ----------------------------------------------------------------------------
+async function fetchWithRetry(url, options, config = {}) {
+  const maxRetries = config.maxRetries ?? RETRY_CONFIG.maxRetries;
+  const baseDelay = config.baseDelay ?? RETRY_CONFIG.baseDelay;
+  const maxDelay = config.maxDelay ?? RETRY_CONFIG.maxDelay;
+  const retryableStatuses = config.retryableStatuses ?? RETRY_CONFIG.retryableStatuses;
+
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+
+      // 成功またはリトライ対象外のエラー
+      if (response.ok || !retryableStatuses.includes(response.status)) {
+        return response;
+      }
+
+      // リトライ対象のエラー
+      lastError = new Error(`HTTP ${response.status}`);
+
+      // 最後の試行の場合はリトライしない
+      if (attempt === maxRetries) {
+        return response;
+      }
+
+      // 指数バックオフで待機
+      const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+      console.log(`[YouTube Summary] Retry ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+    } catch (error) {
+      // ネットワークエラー
+      lastError = error;
+
+      if (attempt === maxRetries) {
+        throw new Error(`Network error after ${maxRetries + 1} attempts: ${error.message}`);
+      }
+
+      // 指数バックオフで待機
+      const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+      console.log(`[YouTube Summary] Network error, retry ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+// ----------------------------------------------------------------------------
+// isRetryableError - リトライ可能なエラーか判定
+// ----------------------------------------------------------------------------
+function isRetryableError(error) {
+  if (!error) return false;
+
+  // ネットワークエラー
+  if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    return true;
+  }
+
+  // タイムアウトエラー
+  if (error.name === 'AbortError') {
+    return true;
+  }
+
+  return false;
 }

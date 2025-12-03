@@ -461,6 +461,52 @@ async function seekVideo(seconds) {
   }
 }
 
+// ----------------------------------------------------------------------------
+// copyToClipboard - クリップボードにコピー（権限チェック付き）
+// ----------------------------------------------------------------------------
+// クリップボードへのアクセス権限を確認し、適切なエラーメッセージを表示します。
+//
+// 引数:
+//   text - コピーするテキスト
+// 戻り値: Promise<boolean> - 成功した場合true
+// ----------------------------------------------------------------------------
+async function copyToClipboard(text) {
+  // クリップボードAPIがサポートされているか確認
+  if (!navigator.clipboard) {
+    showNotification(t('clipboardNotSupported', currentLang));
+    return false;
+  }
+
+  try {
+    // 権限を確認（可能な場合）
+    if (navigator.permissions && navigator.permissions.query) {
+      try {
+        const permission = await navigator.permissions.query({ name: 'clipboard-write' });
+        if (permission.state === 'denied') {
+          showNotification(t('clipboardPermissionDenied', currentLang));
+          return false;
+        }
+      } catch (permError) {
+        // 権限APIがサポートされていない場合は続行
+        console.log('[YouTube Summary] Permission API not supported, proceeding with copy');
+      }
+    }
+
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (error) {
+    console.error('[YouTube Summary] Clipboard error:', error);
+
+    // エラーの種類に応じたメッセージ
+    if (error.name === 'NotAllowedError') {
+      showNotification(t('clipboardPermissionDenied', currentLang));
+    } else {
+      showNotification(t('failedToCopy', currentLang));
+    }
+    return false;
+  }
+}
+
 // Copy transcript
 async function copyTranscript() {
   if (transcriptData.length === 0) {
@@ -470,11 +516,9 @@ async function copyTranscript() {
 
   const text = transcriptData.map(item => `[${item.time}] ${item.text}`).join('\n');
 
-  try {
-    await navigator.clipboard.writeText(text);
+  const success = await copyToClipboard(text);
+  if (success) {
     showNotification(t('transcriptCopied', currentLang));
-  } catch (error) {
-    showNotification(t('failedToCopy', currentLang));
   }
 }
 
@@ -532,7 +576,10 @@ async function summarize() {
       const prompt = getSummaryPrompt(currentLang);
       const fullText = prompt + transcript;
 
-      await navigator.clipboard.writeText(fullText);
+      const copySuccess = await copyToClipboard(fullText);
+      if (!copySuccess) {
+        throw new Error(t('clipboardPermissionDenied', currentLang));
+      }
 
       // Webインターフェースを開く
       const response = await chrome.runtime.sendMessage({
@@ -629,8 +676,10 @@ async function summarize() {
     updateSummaryUI('success');
 
     // Auto copy
-    await navigator.clipboard.writeText(currentSummary);
-    showNotification(t('summaryCopied', currentLang));
+    const copied = await copyToClipboard(currentSummary);
+    if (copied) {
+      showNotification(t('summaryCopied', currentLang));
+    }
 
   } catch (error) {
     summaryContentEl.innerHTML = `
@@ -704,7 +753,10 @@ function updateSummaryUI(state) {
 async function openAIWebWithSummary() {
   try {
     // Copy summary to clipboard first
-    await navigator.clipboard.writeText(currentSummary);
+    const copied = await copyToClipboard(currentSummary);
+    if (!copied) {
+      return; // copyToClipboard already showed error notification
+    }
 
     // Get the AI web URL based on provider
     const response = await chrome.runtime.sendMessage({ action: 'getAIWebUrl' });
@@ -739,11 +791,9 @@ async function copySummary() {
     return;
   }
 
-  try {
-    await navigator.clipboard.writeText(currentSummary);
+  const success = await copyToClipboard(currentSummary);
+  if (success) {
     showNotification(t('summaryCopied', currentLang));
-  } catch (error) {
-    showNotification(t('failedToCopy', currentLang));
   }
 }
 

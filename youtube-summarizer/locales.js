@@ -145,7 +145,22 @@ const LOCALES = {
     subtitleUrlNotFound: 'Subtitle URL not found',
     failedToFetchSubtitles: 'Failed to fetch subtitles',
     videoIdNotFound: 'Video ID not found',
-    subtitleDataNotFound: 'Subtitle data not found'
+    subtitleDataNotFound: 'Subtitle data not found',
+
+    // Network & Retry errors
+    networkError: 'Network error. Please check your connection',
+    retrying: 'Retrying... (attempt {current}/{max})',
+    retryFailed: 'Failed after {max} attempts. Please try again later',
+    apiTimeout: 'API request timed out. Please try again',
+
+    // Clipboard errors
+    clipboardPermissionDenied: 'Clipboard access denied. Please allow clipboard permission',
+    clipboardNotSupported: 'Clipboard is not supported in this browser',
+    clipboardCopySuccess: 'Copied to clipboard',
+
+    // Validation
+    transcriptEmpty: 'Transcript is empty',
+    transcriptTooLong: 'Transcript is very long. It may be truncated'
   },
 
   ja: {
@@ -269,7 +284,22 @@ const LOCALES = {
     subtitleUrlNotFound: '字幕URLが見つかりません',
     failedToFetchSubtitles: '字幕の取得に失敗しました',
     videoIdNotFound: '動画IDが見つかりません',
-    subtitleDataNotFound: '字幕データが見つかりません'
+    subtitleDataNotFound: '字幕データが見つかりません',
+
+    // Network & Retry errors
+    networkError: 'ネットワークエラー。接続を確認してください',
+    retrying: '再試行中... ({current}/{max}回目)',
+    retryFailed: '{max}回試行しましたが失敗しました。しばらくしてから再試行してください',
+    apiTimeout: 'APIリクエストがタイムアウトしました。再試行してください',
+
+    // Clipboard errors
+    clipboardPermissionDenied: 'クリップボードへのアクセスが拒否されました。権限を許可してください',
+    clipboardNotSupported: 'このブラウザではクリップボードがサポートされていません',
+    clipboardCopySuccess: 'クリップボードにコピーしました',
+
+    // Validation
+    transcriptEmpty: '字幕が空です',
+    transcriptTooLong: '字幕が非常に長いため、一部が切り詰められる場合があります'
   }
 };
 
