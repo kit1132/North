@@ -57,9 +57,21 @@ const AI_WEB_URLS = {
 // 拡張機能アイコンクリック時の処理
 // ----------------------------------------------------------------------------
 // ツールバーのアイコンがクリックされたらサイドパネルを開きます。
+// まずサイドパネルを有効化してから開きます。
 // ----------------------------------------------------------------------------
 chrome.action.onClicked.addListener(async (tab) => {
-  await chrome.sidePanel.open({ tabId: tab.id });
+  try {
+    // サイドパネルを有効化
+    await chrome.sidePanel.setOptions({
+      tabId: tab.id,
+      path: 'sidepanel.html',
+      enabled: true
+    });
+    // サイドパネルを開く
+    await chrome.sidePanel.open({ tabId: tab.id });
+  } catch (error) {
+    console.error('Failed to open side panel:', error);
+  }
 });
 
 // ----------------------------------------------------------------------------
