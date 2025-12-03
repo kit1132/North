@@ -7,7 +7,8 @@
     "tabGroups",
     "tabs",
     "storage",
-    "sessions"
+    "sessions",
+    "browsingData"
   ],
   "action": {
     "default_popup": "popup.html",

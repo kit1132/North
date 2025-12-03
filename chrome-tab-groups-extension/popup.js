@@ -20,7 +20,8 @@ const languageSelectEl = document.getElementById('languageSelect');
 const sessionCountEl = document.getElementById('sessionCount');
 const sessionListEl = document.getElementById('sessionList');
 const emptySessionMessageEl = document.getElementById('emptySessionMessage');
-const clearHistoryBtn = document.getElementById('clearHistory');
+const clearRecentlyClosedBtn = document.getElementById('clearRecentlyClosed');
+const clearAllHistoryBtn = document.getElementById('clearAllHistory');
 const refreshHistoryBtn = document.getElementById('refreshHistory');
 
 // DOM elements - Tab navigation
@@ -490,18 +491,42 @@ async function loadSessions() {
   }
 }
 
-// Clear browsing history (this will clear recently closed tabs)
-async function clearBrowsingHistory() {
-  if (!confirm(t('confirmClearHistory'))) {
+// Clear recently closed sessions using browsingData API
+async function clearRecentlyClosed() {
+  if (!confirm(t('confirmClearRecentlyClosed'))) {
     return;
   }
 
   try {
-    // Open Chrome's clear browsing data page
-    await chrome.tabs.create({ url: 'chrome://settings/clearBrowserData' });
-    showStatus(t('historyCleared'));
+    // Clear history from last hour (this clears recently closed tabs)
+    await chrome.browsingData.remove(
+      { since: Date.now() - (60 * 60 * 1000) }, // Last hour
+      { history: true }
+    );
+    showStatus(t('recentlyClosedCleared'));
+    loadSessions();
   } catch (error) {
-    console.error('Failed to open clear history page:', error);
+    console.error('Failed to clear recently closed:', error);
+    showStatus(t('historyClearFailed'), true);
+  }
+}
+
+// Clear all browsing history
+async function clearAllHistory() {
+  if (!confirm(t('confirmClearAllHistory'))) {
+    return;
+  }
+
+  try {
+    // Clear all history
+    await chrome.browsingData.remove(
+      { since: 0 }, // All time
+      { history: true }
+    );
+    showStatus(t('historyCleared'));
+    loadSessions();
+  } catch (error) {
+    console.error('Failed to clear all history:', error);
     showStatus(t('historyClearFailed'), true);
   }
 }
@@ -528,7 +553,8 @@ deleteSelectedBtn.addEventListener('click', deleteSelectedGroups);
 ungroupSelectedBtn.addEventListener('click', ungroupSelectedGroups);
 
 // History Tab
-clearHistoryBtn.addEventListener('click', clearBrowsingHistory);
+clearRecentlyClosedBtn.addEventListener('click', clearRecentlyClosed);
+clearAllHistoryBtn.addEventListener('click', clearAllHistory);
 refreshHistoryBtn.addEventListener('click', () => {
   loadSessions();
   showStatus(t('refreshed'));

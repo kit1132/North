@@ -22,10 +22,11 @@ const translations = {
     recentlyClosed: '最近閉じた履歴',
     // History tab
     sessions: 'セッション',
-    clearHistory: '閲覧履歴をクリア',
+    clearRecentlyClosed: '最近閉じた履歴を削除',
+    clearAllHistory: '全閲覧履歴を削除',
     recentlyClosedList: '最近閉じたタブ/ウィンドウ',
     noSessions: '最近閉じたセッションはありません',
-    historyNote: '※ Chromeの履歴をクリアすると、最近閉じたタブの履歴も削除されます。',
+    historyNote: '※ 履歴を削除すると、タブグループの復元履歴も削除されます。Chromeのパフォーマンス改善に役立ちます。',
     restore: '復元',
     tab: 'タブ',
     window: 'ウィンドウ',
@@ -41,15 +42,17 @@ const translations = {
     noSelection: '選択されていません',
     restored: '復元しました',
     restoreFailed: '復元に失敗しました',
-    historyCleared: '履歴をクリアしました',
-    historyClearFailed: '履歴のクリアに失敗しました',
+    historyCleared: '履歴を削除しました',
+    historyClearFailed: '履歴の削除に失敗しました',
+    recentlyClosedCleared: '最近閉じた履歴を削除しました',
     // Confirm messages
     confirmDeleteAll: '個のグループ（合計 {tabs} タブ）を全て削除しますか？\nこの操作は取り消せません。',
     confirmUngroupAll: '個のグループを全て解除しますか？\nタブは閉じられずに残ります。',
     confirmDeleteGroup: 'グループ内の {tabs} 個のタブを閉じますか？',
     confirmDeleteSelected: '個の選択したグループを削除しますか？',
     confirmUngroupSelected: '個の選択したグループを解除しますか？',
-    confirmClearHistory: '閲覧履歴をクリアしますか？\n最近閉じたタブの履歴も削除されます。'
+    confirmClearRecentlyClosed: '最近閉じた履歴を削除しますか？\nこの操作は取り消せません。',
+    confirmClearAllHistory: '全閲覧履歴を削除しますか？\nこの操作は取り消せません。'
   },
   en: {
     groups: 'groups',
@@ -73,10 +76,11 @@ const translations = {
     recentlyClosed: 'Recently Closed',
     // History tab
     sessions: 'sessions',
-    clearHistory: 'Clear History',
+    clearRecentlyClosed: 'Clear Recently Closed',
+    clearAllHistory: 'Clear All History',
     recentlyClosedList: 'Recently Closed Tabs/Windows',
     noSessions: 'No recently closed sessions',
-    historyNote: '* Clearing Chrome history will also remove recently closed tabs.',
+    historyNote: '* Clearing history will remove tab group restore history and improve Chrome performance.',
     restore: 'Restore',
     tab: 'Tab',
     window: 'Window',
@@ -94,13 +98,15 @@ const translations = {
     restoreFailed: 'Failed to restore',
     historyCleared: 'History cleared',
     historyClearFailed: 'Failed to clear history',
+    recentlyClosedCleared: 'Recently closed history cleared',
     // Confirm messages
     confirmDeleteAll: 'Delete all {count} groups ({tabs} tabs total)?\nThis cannot be undone.',
     confirmUngroupAll: 'Ungroup all {count} groups?\nTabs will remain open.',
     confirmDeleteGroup: 'Close {tabs} tabs in this group?',
     confirmDeleteSelected: 'Delete {count} selected group(s)?',
     confirmUngroupSelected: 'Ungroup {count} selected group(s)?',
-    confirmClearHistory: 'Clear browsing history?\nThis will also remove recently closed tabs.'
+    confirmClearRecentlyClosed: 'Clear recently closed history?\nThis cannot be undone.',
+    confirmClearAllHistory: 'Clear all browsing history?\nThis cannot be undone.'
   }
 };
 
