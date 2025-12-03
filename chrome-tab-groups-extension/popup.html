@@ -32,7 +32,8 @@
     <!-- Tab Navigation -->
     <div class="tab-nav">
       <button class="tab-btn active" data-tab="current" data-i18n="currentGroups">現在のグループ</button>
-      <button class="tab-btn" data-tab="history" data-i18n="recentlyClosed">最近閉じた履歴</button>
+      <button class="tab-btn" data-tab="saved" data-i18n="savedGroups">保存済みグループ</button>
+      <button class="tab-btn" data-tab="history" data-i18n="recentlyClosed">履歴</button>
     </div>
 
     <!-- Current Groups Tab -->
@@ -78,6 +79,36 @@
         <div id="emptyMessage" class="empty-message" style="display: none;" data-i18n="noGroups">
           タブグループはありません
         </div>
+      </div>
+    </div>
+
+    <!-- Saved Groups Tab -->
+    <div id="savedTab" class="tab-content">
+      <div class="stats">
+        <span id="savedGroupCount">0</span> <span data-i18n="savedGroupsCount">保存済みグループ</span>
+      </div>
+
+      <div class="actions">
+        <button id="deleteAllSavedGroups" class="btn btn-danger" data-i18n="deleteAllSaved">
+          全ての保存済みグループを削除
+        </button>
+        <button id="refreshSavedGroups" class="btn btn-secondary" data-i18n="refresh">
+          更新
+        </button>
+      </div>
+
+      <div class="group-list-container">
+        <h2 data-i18n="savedGroupsList">保存されたタブグループ</h2>
+        <div id="savedGroupList" class="group-list">
+          <!-- 保存されたグループがここに表示される -->
+        </div>
+        <div id="emptySavedMessage" class="empty-message" style="display: none;" data-i18n="noSavedGroups">
+          保存されたタブグループはありません
+        </div>
+      </div>
+
+      <div class="info-box">
+        <p data-i18n="savedGroupsNote">※ Chromeに保存されたタブグループを削除します。Acid Tabs等で蓄積したグループを一括削除できます。</p>
       </div>
     </div>
 

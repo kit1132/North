@@ -19,7 +19,17 @@ const translations = {
     unnamed: '(名前なし)',
     // Tab navigation
     currentGroups: '現在のグループ',
-    recentlyClosed: '最近閉じた履歴',
+    savedGroups: '保存済みグループ',
+    recentlyClosed: '履歴',
+    // Saved groups tab
+    savedGroupsCount: '保存済みグループ',
+    deleteAllSaved: '全ての保存済みグループを削除',
+    savedGroupsList: '保存されたタブグループ',
+    noSavedGroups: '保存されたタブグループはありません',
+    savedGroupsNote: '※ Chromeに保存されたタブグループを削除します。Acid Tabs等で蓄積したグループを一括削除できます。',
+    savedGroupDeleted: '保存済みグループを削除しました',
+    confirmDeleteAllSaved: '全ての保存済みグループを削除しますか？\nこの操作は取り消せません。',
+    confirmDeleteSavedGroup: 'この保存済みグループを削除しますか？',
     // History tab
     sessions: 'セッション',
     clearRecentlyClosed: '最近閉じた履歴を削除',
@@ -73,7 +83,17 @@ const translations = {
     unnamed: '(Unnamed)',
     // Tab navigation
     currentGroups: 'Current Groups',
-    recentlyClosed: 'Recently Closed',
+    savedGroups: 'Saved Groups',
+    recentlyClosed: 'History',
+    // Saved groups tab
+    savedGroupsCount: 'saved groups',
+    deleteAllSaved: 'Delete All Saved Groups',
+    savedGroupsList: 'Saved Tab Groups',
+    noSavedGroups: 'No saved tab groups',
+    savedGroupsNote: '* Delete saved tab groups in Chrome. Clear groups accumulated by Acid Tabs etc.',
+    savedGroupDeleted: 'Saved group deleted',
+    confirmDeleteAllSaved: 'Delete all saved groups?\nThis cannot be undone.',
+    confirmDeleteSavedGroup: 'Delete this saved group?',
     // History tab
     sessions: 'sessions',
     clearRecentlyClosed: 'Clear Recently Closed',

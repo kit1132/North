@@ -16,6 +16,13 @@ const settingsToggleBtn = document.getElementById('settingsToggle');
 const settingsPanelEl = document.getElementById('settingsPanel');
 const languageSelectEl = document.getElementById('languageSelect');
 
+// DOM elements - Saved Groups Tab
+const savedGroupCountEl = document.getElementById('savedGroupCount');
+const savedGroupListEl = document.getElementById('savedGroupList');
+const emptySavedMessageEl = document.getElementById('emptySavedMessage');
+const deleteAllSavedGroupsBtn = document.getElementById('deleteAllSavedGroups');
+const refreshSavedGroupsBtn = document.getElementById('refreshSavedGroups');
+
 // DOM elements - History Tab
 const sessionCountEl = document.getElementById('sessionCount');
 const sessionListEl = document.getElementById('sessionList');
@@ -27,12 +34,14 @@ const refreshHistoryBtn = document.getElementById('refreshHistory');
 // DOM elements - Tab navigation
 const tabBtns = document.querySelectorAll('.tab-btn');
 const currentTabEl = document.getElementById('currentTab');
+const savedTabEl = document.getElementById('savedTab');
 const historyTabEl = document.getElementById('historyTab');
 
 // State
 let selectedGroups = new Set();
 let groupsData = [];
 let sessionsData = [];
+let savedGroupsData = [];
 
 // Show status message
 function showStatus(message, isError = false) {
@@ -53,12 +62,17 @@ function switchTab(tabName) {
     }
   });
 
+  currentTabEl.classList.remove('active');
+  savedTabEl.classList.remove('active');
+  historyTabEl.classList.remove('active');
+
   if (tabName === 'current') {
     currentTabEl.classList.add('active');
-    historyTabEl.classList.remove('active');
     loadGroups();
+  } else if (tabName === 'saved') {
+    savedTabEl.classList.add('active');
+    loadSavedGroups();
   } else {
-    currentTabEl.classList.remove('active');
     historyTabEl.classList.add('active');
     loadSessions();
   }
@@ -372,6 +386,142 @@ function toggleSettings() {
   }
 }
 
+// ==================== Saved Groups (Bookmarks) ====================
+
+// Find saved tab groups in bookmarks
+async function findSavedTabGroups() {
+  try {
+    const bookmarkTree = await chrome.bookmarks.getTree();
+    const savedGroups = [];
+
+    // Recursive function to find tab group folders
+    function searchBookmarks(nodes, depth = 0) {
+      for (const node of nodes) {
+        // Look for folders that might be saved tab groups
+        // Chrome saves tab groups in a special format
+        if (node.children) {
+          // Check if this looks like a saved tab group folder
+          // Saved tab groups typically have a specific structure
+          const hasUrls = node.children.some(child => child.url);
+          const isFolder = !node.url;
+
+          if (isFolder && hasUrls && node.title) {
+            // This might be a saved tab group
+            savedGroups.push({
+              id: node.id,
+              title: node.title,
+              children: node.children,
+              tabCount: node.children.filter(c => c.url).length
+            });
+          }
+
+          // Continue searching in subfolders
+          searchBookmarks(node.children, depth + 1);
+        }
+      }
+    }
+
+    searchBookmarks(bookmarkTree);
+    return savedGroups;
+  } catch (error) {
+    console.error('Failed to find saved tab groups:', error);
+    return [];
+  }
+}
+
+// Delete a saved group (bookmark folder)
+async function deleteSavedGroup(groupId) {
+  try {
+    await chrome.bookmarks.removeTree(groupId);
+    return true;
+  } catch (error) {
+    console.error('Failed to delete saved group:', error);
+    return false;
+  }
+}
+
+// Render a saved group item
+function renderSavedGroupItem(group) {
+  const item = document.createElement('div');
+  item.className = 'session-item session-tab';
+  item.dataset.groupId = group.id;
+
+  const groupName = group.title || t('unnamed');
+
+  item.innerHTML = `
+    <div class="session-icon">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="#1a73e8">
+        <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm1 0v10h10V3H3z"/>
+        <path d="M4 5h8v1H4V5zm0 2h8v1H4V7zm0 2h5v1H4V9z"/>
+      </svg>
+    </div>
+    <div class="session-info">
+      <span class="session-title" title="${groupName}">${groupName}</span>
+      <span class="session-url">${t('tabsCount', { count: group.tabCount })}</span>
+    </div>
+    <div class="session-actions">
+      <button class="btn btn-danger btn-sm delete-btn">${t('delete')}</button>
+    </div>
+  `;
+
+  item.querySelector('.delete-btn').addEventListener('click', async () => {
+    if (confirm(t('confirmDeleteSavedGroup'))) {
+      const success = await deleteSavedGroup(group.id);
+      if (success) {
+        showStatus(t('savedGroupDeleted'));
+        loadSavedGroups();
+      } else {
+        showStatus(t('deleteFailed'), true);
+      }
+    }
+  });
+
+  return item;
+}
+
+// Load and display saved groups
+async function loadSavedGroups() {
+  const groups = await findSavedTabGroups();
+  savedGroupsData = groups;
+
+  savedGroupCountEl.textContent = groups.length;
+  savedGroupListEl.innerHTML = '';
+
+  if (groups.length === 0) {
+    emptySavedMessageEl.style.display = 'block';
+    savedGroupListEl.style.display = 'none';
+  } else {
+    emptySavedMessageEl.style.display = 'none';
+    savedGroupListEl.style.display = 'flex';
+
+    for (const group of groups) {
+      const item = renderSavedGroupItem(group);
+      savedGroupListEl.appendChild(item);
+    }
+  }
+}
+
+// Delete all saved groups
+async function deleteAllSavedGroups() {
+  if (savedGroupsData.length === 0) {
+    showStatus(t('noGroupsToDelete'));
+    return;
+  }
+
+  if (!confirm(t('confirmDeleteAllSaved'))) {
+    return;
+  }
+
+  let deleted = 0;
+  for (const group of savedGroupsData) {
+    const success = await deleteSavedGroup(group.id);
+    if (success) deleted++;
+  }
+
+  showStatus(`${deleted} ${t('savedGroupDeleted')}`);
+  loadSavedGroups();
+}
+
 // ==================== Sessions (History Tab) ====================
 
 // Get recently closed sessions
@@ -552,6 +702,13 @@ deselectAllBtn.addEventListener('click', deselectAllGroups);
 deleteSelectedBtn.addEventListener('click', deleteSelectedGroups);
 ungroupSelectedBtn.addEventListener('click', ungroupSelectedGroups);
 
+// Saved Groups Tab
+deleteAllSavedGroupsBtn.addEventListener('click', deleteAllSavedGroups);
+refreshSavedGroupsBtn.addEventListener('click', () => {
+  loadSavedGroups();
+  showStatus(t('refreshed'));
+});
+
 // History Tab
 clearRecentlyClosedBtn.addEventListener('click', clearRecentlyClosed);
 clearAllHistoryBtn.addEventListener('click', clearAllHistory);
@@ -569,6 +726,8 @@ languageSelectEl.addEventListener('change', (e) => {
   // Reload current tab content
   if (currentTabEl.classList.contains('active')) {
     loadGroups();
+  } else if (savedTabEl.classList.contains('active')) {
+    loadSavedGroups();
   } else {
     loadSessions();
   }

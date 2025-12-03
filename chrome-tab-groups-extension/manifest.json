@@ -8,7 +8,8 @@
     "tabs",
     "storage",
     "sessions",
-    "browsingData"
+    "browsingData",
+    "bookmarks"
   ],
   "action": {
     "default_popup": "popup.html",
