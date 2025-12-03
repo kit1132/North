@@ -248,19 +248,29 @@ async function init() {
   }
 
   // Watch for URL changes (YouTube SPA navigation)
+  // スロットリングを追加してパフォーマンスを改善
   let lastUrl = location.href;
+  let observerTimeout = null;
+
   new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      if (window.location.pathname.includes('/watch')) {
-        // Reset data for new video
-        transcriptData = [];
-        currentSummary = '';
-        updateTranscriptUI();
-        updateSummaryUI('empty');
+    // スロットリング: 500ms以内の連続呼び出しを無視
+    if (observerTimeout) return;
+
+    observerTimeout = setTimeout(() => {
+      observerTimeout = null;
+
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        if (window.location.pathname.includes('/watch')) {
+          // Reset data for new video
+          transcriptData = [];
+          currentSummary = '';
+          updateTranscriptUI();
+          updateSummaryUI('empty');
+        }
       }
-    }
-  }).observe(document, { subtree: true, childList: true });
+    }, 500);
+  }).observe(document.body, { subtree: false, childList: true });
 }
 
 // ============================================================================
@@ -760,31 +770,41 @@ function getVideoId() {
 //
 // 戻り値: [{time: "0:00", seconds: 0, text: "字幕テキスト"}, ...]
 // ----------------------------------------------------------------------------
+// 字幕キャッシュ（同じ動画の再取得を防ぐ）
+const transcriptCache = new Map();
+
 async function getTranscriptData() {
   const videoId = getVideoId();
   if (!videoId) {
     throw new Error('Video ID not found');
   }
 
-  // Try multiple methods in order of reliability
+  // キャッシュを確認
+  if (transcriptCache.has(videoId)) {
+    console.log('[YouTube要約] キャッシュから字幕を取得');
+    return transcriptCache.get(videoId);
+  }
+
+  // 最適化: ネットワーク不要な方法を先に試す
   const methods = [
-    { name: 'Innertube API', fn: () => getTranscriptFromInnertube(videoId) },
     { name: 'Page embedded data', fn: () => getTranscriptFromPage() },
     { name: 'YouTube API', fn: () => getTranscriptFromYouTubeAPI(videoId) },
+    { name: 'Innertube API', fn: () => getTranscriptFromInnertube(videoId) },
     { name: 'Page refetch', fn: () => getTranscriptFromFetch(videoId) },
     { name: 'Transcript panel', fn: () => getTranscriptFromPanel() }
   ];
 
   for (const method of methods) {
     try {
-      console.log(`[YouTube要約] ${method.name}で字幕を取得中...`);
       const data = await method.fn();
       if (data && data.length > 0) {
-        console.log(`[YouTube要約] ${method.name}で${data.length}件の字幕を取得しました`);
+        console.log(`[YouTube要約] ${method.name}で${data.length}件の字幕を取得`);
+        // キャッシュに保存
+        transcriptCache.set(videoId, data);
         return data;
       }
     } catch (e) {
-      console.log(`[YouTube要約] ${method.name}失敗:`, e.message);
+      // エラーは静かに処理（パフォーマンス向上）
     }
   }
 
