@@ -54,25 +54,22 @@ const AI_WEB_URLS = {
 // ============================================================================
 
 // ----------------------------------------------------------------------------
-// 拡張機能アイコンクリック時の処理
+// 拡張機能インストール/起動時の初期化
 // ----------------------------------------------------------------------------
-// ツールバーのアイコンがクリックされたらサイドパネルを開きます。
-// まずサイドパネルを有効化してから開きます。
+// サイドパネルをアイコンクリックで開くように設定します。
 // ----------------------------------------------------------------------------
-chrome.action.onClicked.addListener(async (tab) => {
+chrome.runtime.onInstalled.addListener(async () => {
+  // アイコンクリックでサイドパネルを開く設定
   try {
-    // サイドパネルを有効化
-    await chrome.sidePanel.setOptions({
-      tabId: tab.id,
-      path: 'sidepanel.html',
-      enabled: true
-    });
-    // サイドパネルを開く
-    await chrome.sidePanel.open({ tabId: tab.id });
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    console.log('[YouTube Summary] Side panel behavior set');
   } catch (error) {
-    console.error('Failed to open side panel:', error);
+    console.error('[YouTube Summary] Failed to set panel behavior:', error);
   }
 });
+
+// Service Worker起動時にも設定を確認
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 
 // ----------------------------------------------------------------------------
 // タブ更新時のサイドパネル有効化
