@@ -6,6 +6,19 @@ const statusEl = document.getElementById('status');
 const deleteAllBtn = document.getElementById('deleteAllGroups');
 const ungroupAllBtn = document.getElementById('ungroupAllTabs');
 const refreshBtn = document.getElementById('refreshList');
+const selectAllBtn = document.getElementById('selectAll');
+const deselectAllBtn = document.getElementById('deselectAll');
+const selectionActionsEl = document.getElementById('selectionActions');
+const selectedCountEl = document.getElementById('selectedCount');
+const deleteSelectedBtn = document.getElementById('deleteSelected');
+const ungroupSelectedBtn = document.getElementById('ungroupSelected');
+const settingsToggleBtn = document.getElementById('settingsToggle');
+const settingsPanelEl = document.getElementById('settingsPanel');
+const languageSelectEl = document.getElementById('languageSelect');
+
+// State
+let selectedGroups = new Set();
+let groupsData = [];
 
 // Show status message
 function showStatus(message, isError = false) {
@@ -14,6 +27,31 @@ function showStatus(message, isError = false) {
   setTimeout(() => {
     statusEl.className = 'status';
   }, 3000);
+}
+
+// Update selection UI
+function updateSelectionUI() {
+  const count = selectedGroups.size;
+  selectedCountEl.textContent = count;
+
+  if (count > 0) {
+    selectionActionsEl.style.display = 'flex';
+  } else {
+    selectionActionsEl.style.display = 'none';
+  }
+
+  // Update checkbox states
+  document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+    const groupId = parseInt(checkbox.dataset.groupId);
+    checkbox.checked = selectedGroups.has(groupId);
+
+    const item = checkbox.closest('.group-item');
+    if (selectedGroups.has(groupId)) {
+      item.classList.add('selected');
+    } else {
+      item.classList.remove('selected');
+    }
+  });
 }
 
 // Get all tab groups
@@ -72,43 +110,77 @@ async function ungroupTabs(groupId) {
 function renderGroupItem(group, tabCount) {
   const item = document.createElement('div');
   item.className = `group-item border-${group.color}`;
+  item.dataset.groupId = group.id;
 
-  const groupName = group.title || '(名前なし)';
+  const groupName = group.title || t('unnamed');
 
   item.innerHTML = `
+    <input type="checkbox" class="group-checkbox" data-group-id="${group.id}">
     <div class="group-info">
       <div class="group-color color-${group.color}"></div>
       <span class="group-name" title="${groupName}">${groupName}</span>
-      <span class="group-tab-count">${tabCount} タブ</span>
+      <span class="group-tab-count">${tabCount} ${t('tabs')}</span>
     </div>
     <div class="group-actions">
-      <button class="btn btn-warning btn-sm ungroup-btn" title="グループ解除">解除</button>
-      <button class="btn btn-danger btn-sm delete-btn" title="削除">削除</button>
+      <button class="btn btn-warning btn-sm ungroup-btn" title="${t('ungroup')}">${t('ungroup')}</button>
+      <button class="btn btn-danger btn-sm delete-btn" title="${t('delete')}">${t('delete')}</button>
     </div>
   `;
 
-  // Add event listeners
-  item.querySelector('.delete-btn').addEventListener('click', async () => {
-    if (confirm(`"${groupName}" グループ内の ${tabCount} 個のタブを閉じますか？`)) {
+  // Checkbox event
+  const checkbox = item.querySelector('.group-checkbox');
+  checkbox.addEventListener('change', () => {
+    if (checkbox.checked) {
+      selectedGroups.add(group.id);
+    } else {
+      selectedGroups.delete(group.id);
+    }
+    updateSelectionUI();
+  });
+
+  // Click on group info to toggle selection
+  item.querySelector('.group-info').addEventListener('click', () => {
+    checkbox.checked = !checkbox.checked;
+    if (checkbox.checked) {
+      selectedGroups.add(group.id);
+    } else {
+      selectedGroups.delete(group.id);
+    }
+    updateSelectionUI();
+  });
+
+  // Add event listeners for buttons
+  item.querySelector('.delete-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (confirm(t('confirmDeleteGroup', { tabs: tabCount }).replace('{name}', `"${groupName}"`))) {
       const success = await deleteGroup(group.id);
       if (success) {
-        showStatus(`"${groupName}" を削除しました`);
+        showStatus(`"${groupName}" ${t('deleted').replace(/^\d+/, '').trim()}`);
+        selectedGroups.delete(group.id);
         loadGroups();
       } else {
-        showStatus('削除に失敗しました', true);
+        showStatus(t('deleteFailed'), true);
       }
     }
   });
 
-  item.querySelector('.ungroup-btn').addEventListener('click', async () => {
+  item.querySelector('.ungroup-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
     const success = await ungroupTabs(group.id);
     if (success) {
-      showStatus(`"${groupName}" のグループを解除しました`);
+      showStatus(`"${groupName}" ${t('ungrouped').replace(/^\d+/, '').trim()}`);
+      selectedGroups.delete(group.id);
       loadGroups();
     } else {
-      showStatus('グループ解除に失敗しました', true);
+      showStatus(t('ungroupFailed'), true);
     }
   });
+
+  // Check if already selected
+  if (selectedGroups.has(group.id)) {
+    checkbox.checked = true;
+    item.classList.add('selected');
+  }
 
   return item;
 }
@@ -116,6 +188,11 @@ function renderGroupItem(group, tabCount) {
 // Load and display all groups
 async function loadGroups() {
   const groups = await getTabGroups();
+  groupsData = groups;
+
+  // Clean up selected groups that no longer exist
+  const existingIds = new Set(groups.map(g => g.id));
+  selectedGroups = new Set([...selectedGroups].filter(id => existingIds.has(id)));
 
   groupCountEl.textContent = groups.length;
   groupListEl.innerHTML = '';
@@ -133,6 +210,8 @@ async function loadGroups() {
       groupListEl.appendChild(item);
     }
   }
+
+  updateSelectionUI();
 }
 
 // Delete all groups
@@ -140,7 +219,7 @@ async function deleteAllGroups() {
   const groups = await getTabGroups();
 
   if (groups.length === 0) {
-    showStatus('削除するグループがありません');
+    showStatus(t('noGroupsToDelete'));
     return;
   }
 
@@ -148,7 +227,8 @@ async function deleteAllGroups() {
     groups.map(g => getTabsInGroup(g.id))
   ).then(results => results.reduce((sum, tabs) => sum + tabs.length, 0));
 
-  if (!confirm(`${groups.length} 個のグループ（合計 ${totalTabs} タブ）を全て削除しますか？\nこの操作は取り消せません。`)) {
+  const message = t('confirmDeleteAll', { count: groups.length, tabs: totalTabs });
+  if (!confirm(message)) {
     return;
   }
 
@@ -158,7 +238,8 @@ async function deleteAllGroups() {
     if (success) deleted++;
   }
 
-  showStatus(`${deleted} 個のグループを削除しました`);
+  selectedGroups.clear();
+  showStatus(`${deleted} ${t('deleted')}`);
   loadGroups();
 }
 
@@ -167,11 +248,12 @@ async function ungroupAllTabs() {
   const groups = await getTabGroups();
 
   if (groups.length === 0) {
-    showStatus('解除するグループがありません');
+    showStatus(t('noGroupsToUngroup'));
     return;
   }
 
-  if (!confirm(`${groups.length} 個のグループを全て解除しますか？\nタブは閉じられずに残ります。`)) {
+  const message = t('confirmUngroupAll', { count: groups.length });
+  if (!confirm(message)) {
     return;
   }
 
@@ -181,8 +263,78 @@ async function ungroupAllTabs() {
     if (success) ungrouped++;
   }
 
-  showStatus(`${ungrouped} 個のグループを解除しました`);
+  selectedGroups.clear();
+  showStatus(`${ungrouped} ${t('ungrouped')}`);
   loadGroups();
+}
+
+// Delete selected groups
+async function deleteSelectedGroups() {
+  if (selectedGroups.size === 0) {
+    showStatus(t('noSelection'));
+    return;
+  }
+
+  const message = t('confirmDeleteSelected', { count: selectedGroups.size });
+  if (!confirm(message)) {
+    return;
+  }
+
+  let deleted = 0;
+  for (const groupId of selectedGroups) {
+    const success = await deleteGroup(groupId);
+    if (success) deleted++;
+  }
+
+  selectedGroups.clear();
+  showStatus(`${deleted} ${t('deleted')}`);
+  loadGroups();
+}
+
+// Ungroup selected groups
+async function ungroupSelectedGroups() {
+  if (selectedGroups.size === 0) {
+    showStatus(t('noSelection'));
+    return;
+  }
+
+  const message = t('confirmUngroupSelected', { count: selectedGroups.size });
+  if (!confirm(message)) {
+    return;
+  }
+
+  let ungrouped = 0;
+  for (const groupId of selectedGroups) {
+    const success = await ungroupTabs(groupId);
+    if (success) ungrouped++;
+  }
+
+  selectedGroups.clear();
+  showStatus(`${ungrouped} ${t('ungrouped')}`);
+  loadGroups();
+}
+
+// Select all groups
+function selectAllGroups() {
+  groupsData.forEach(group => {
+    selectedGroups.add(group.id);
+  });
+  updateSelectionUI();
+}
+
+// Deselect all groups
+function deselectAllGroups() {
+  selectedGroups.clear();
+  updateSelectionUI();
+}
+
+// Toggle settings panel
+function toggleSettings() {
+  if (settingsPanelEl.style.display === 'none') {
+    settingsPanelEl.style.display = 'block';
+  } else {
+    settingsPanelEl.style.display = 'none';
+  }
 }
 
 // Event listeners
@@ -190,7 +342,18 @@ deleteAllBtn.addEventListener('click', deleteAllGroups);
 ungroupAllBtn.addEventListener('click', ungroupAllTabs);
 refreshBtn.addEventListener('click', () => {
   loadGroups();
-  showStatus('リストを更新しました');
+  showStatus(t('refreshed'));
+});
+selectAllBtn.addEventListener('click', selectAllGroups);
+deselectAllBtn.addEventListener('click', deselectAllGroups);
+deleteSelectedBtn.addEventListener('click', deleteSelectedGroups);
+ungroupSelectedBtn.addEventListener('click', ungroupSelectedGroups);
+settingsToggleBtn.addEventListener('click', toggleSettings);
+
+// Language change event
+languageSelectEl.addEventListener('change', (e) => {
+  setLanguage(e.target.value);
+  loadGroups(); // Reload to update dynamic content
 });
 
 // Initial load

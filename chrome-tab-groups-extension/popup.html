@@ -8,30 +8,66 @@
 </head>
 <body>
   <div class="container">
-    <h1>Tab Groups Cleaner</h1>
+    <div class="header">
+      <h1>Tab Groups Cleaner</h1>
+      <button id="settingsToggle" class="btn-icon" title="Settings">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+          <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Settings Panel -->
+    <div id="settingsPanel" class="settings-panel" style="display: none;">
+      <div class="setting-item">
+        <label data-i18n="language">Language / 言語</label>
+        <select id="languageSelect">
+          <option value="ja">日本語</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+    </div>
 
     <div class="stats">
-      <span id="groupCount">0</span> グループ
+      <span id="groupCount">0</span> <span data-i18n="groups">グループ</span>
+    </div>
+
+    <!-- Selection Actions -->
+    <div id="selectionActions" class="selection-actions" style="display: none;">
+      <span id="selectedCount">0</span> <span data-i18n="selected">選択中</span>
+      <div class="selection-buttons">
+        <button id="deleteSelected" class="btn btn-danger btn-sm" data-i18n="deleteSelected">選択を削除</button>
+        <button id="ungroupSelected" class="btn btn-warning btn-sm" data-i18n="ungroupSelected">選択を解除</button>
+      </div>
     </div>
 
     <div class="actions">
-      <button id="deleteAllGroups" class="btn btn-danger">
+      <button id="deleteAllGroups" class="btn btn-danger" data-i18n="deleteAll">
         全グループを削除
       </button>
-      <button id="ungroupAllTabs" class="btn btn-warning">
+      <button id="ungroupAllTabs" class="btn btn-warning" data-i18n="ungroupAll">
         全グループを解除（タブは保持）
       </button>
-      <button id="refreshList" class="btn btn-secondary">
+      <div class="action-row">
+        <button id="selectAll" class="btn btn-secondary btn-half" data-i18n="selectAll">
+          全選択
+        </button>
+        <button id="deselectAll" class="btn btn-secondary btn-half" data-i18n="deselectAll">
+          選択解除
+        </button>
+      </div>
+      <button id="refreshList" class="btn btn-secondary" data-i18n="refresh">
         更新
       </button>
     </div>
 
     <div class="group-list-container">
-      <h2>グループ一覧</h2>
+      <h2 data-i18n="groupList">グループ一覧</h2>
       <div id="groupList" class="group-list">
         <!-- グループがここに表示される -->
       </div>
-      <div id="emptyMessage" class="empty-message" style="display: none;">
+      <div id="emptyMessage" class="empty-message" style="display: none;" data-i18n="noGroups">
         タブグループはありません
       </div>
     </div>
@@ -39,6 +75,7 @@
     <div id="status" class="status"></div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

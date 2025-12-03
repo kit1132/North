@@ -5,7 +5,8 @@
   "description": "タブグループを一括削除・管理できる拡張機能。Chromeのメモリを節約します。",
   "permissions": [
     "tabGroups",
-    "tabs"
+    "tabs",
+    "storage"
   ],
   "action": {
     "default_popup": "popup.html",
