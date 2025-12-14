@@ -1,0 +1,21 @@
+# MoneyForward ME Auto Analysis System
+# Required Python packages
+
+# Web automation
+selenium>=4.15.0
+webdriver-manager>=4.0.1
+
+# HTTP requests
+requests>=2.31.0
+
+# Data processing
+pandas>=2.1.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Claude API (Anthropic)
+anthropic>=0.39.0
+
+# 2FA TOTP generation (alternative to oath-toolkit)
+pyotp>=2.9.0

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Unique identifier for this job -->
+    <key>Label</key>
+    <string>com.moneyforward.weekly-analysis</string>
+
+    <!-- Description -->
+    <key>Comment</key>
+    <string>MoneyForward ME Weekly Analysis and Notification</string>
+
+    <!-- Program to execute -->
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Update these paths to match your environment -->
+        <string>/usr/local/bin/python3</string>
+        <string>-m</string>
+        <string>moneyforward_analyzer.main</string>
+    </array>
+
+    <!-- Working directory (update to your project path) -->
+    <key>WorkingDirectory</key>
+    <string>/Users/YOUR_USERNAME/projects/moneyforward_analyzer</string>
+
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- Path to your .env file -->
+        <key>DOTENV_PATH</key>
+        <string>/Users/YOUR_USERNAME/projects/moneyforward_analyzer/.env</string>
+        <!-- Ensure Python can find the module -->
+        <key>PYTHONPATH</key>
+        <string>/Users/YOUR_USERNAME/projects/moneyforward_analyzer</string>
+    </dict>
+
+    <!-- Schedule: Every Monday at 9:00 AM -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/logs/moneyforward/launchd-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/logs/moneyforward/launchd-stderr.log</string>
+
+    <!-- Run even if computer was asleep at scheduled time -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- Keep alive settings (don't restart on failure) -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Timeout before force termination -->
+    <key>TimeOut</key>
+    <integer>600</integer>
+</dict>
+</plist>
