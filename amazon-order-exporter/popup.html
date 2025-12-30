@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon Order Exporter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Amazon Order Exporter</h1>
+
+    <div class="description">
+      Amazon.co.jpの注文履歴をCSV形式でエクスポートします。
+    </div>
+
+    <div class="form-group">
+      <label for="yearSelect">年を選択:</label>
+      <select id="yearSelect"></select>
+    </div>
+
+    <div class="button-group">
+      <button id="exportBtn" class="primary-btn">
+        <span class="btn-text">エクスポート開始</span>
+        <span class="btn-loading" style="display: none;">取得中...</span>
+      </button>
+    </div>
+
+    <div id="progressContainer" class="progress-container" style="display: none;">
+      <div class="progress-bar">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+      <div id="progressText" class="progress-text">準備中...</div>
+    </div>
+
+    <div id="resultContainer" class="result-container" style="display: none;">
+      <div class="result-summary">
+        <span id="orderCount">0</span>件の注文を取得しました
+      </div>
+      <div class="result-total">
+        総支出: ¥<span id="totalSpent">0</span>
+      </div>
+      <button id="copyBtn" class="secondary-btn">
+        クリップボードにコピー
+      </button>
+    </div>
+
+    <div id="statusMessage" class="status-message" style="display: none;"></div>
+
+    <div class="footer">
+      <small>個人利用専用 | Claude分析用CSV出力</small>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
