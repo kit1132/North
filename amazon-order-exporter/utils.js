@@ -53,10 +53,17 @@ const ErrorMessages = Object.freeze({
  * @type {Object.<string, string|string[]>}
  */
 const DOMSelectors = Object.freeze({
-  // 注文カード関連
-  ORDER_CARD: '.order-card',
+  // 注文カード関連（2025年1月時点のDOM構造）
+  ORDER_CARD: '.a-box-group.a-spacing-top-base',
+  ORDER_CARD_ALT: '#orderCard',
+  ORDER_CARD_FALLBACK: '.order-card',
   ORDER_INFO: '.order-info',
   ORDER_INFO_VALUES: '.order-info span.a-color-secondary.value',
+
+  // 注文ヘッダー情報（日付、合計、注文ID）
+  ORDER_HEADER: '#orderCardHeader, .a-box.a-color-offset-background',
+  ORDER_DATE: '.a-column.a-span2',
+  ORDER_TOTAL: '.a-column.a-span2 .a-color-secondary',
 
   // 商品情報関連
   PRODUCT_ITEM: '.yohtmlc-item',

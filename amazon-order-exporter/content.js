@@ -38,8 +38,15 @@
     };
 
     const DOMSelectors = {
-      ORDER_CARD: '.order-card',
+      // 注文カード関連（2025年1月時点のDOM構造）
+      ORDER_CARD: '.a-box-group.a-spacing-top-base',
+      ORDER_CARD_ALT: '#orderCard',
+      ORDER_CARD_FALLBACK: '.order-card',
       ORDER_INFO_VALUES: '.order-info span.a-color-secondary.value',
+      // 注文ヘッダー情報
+      ORDER_HEADER: '#orderCardHeader, .a-box.a-color-offset-background',
+      ORDER_DATE: '.a-column.a-span2',
+      // 商品情報
       PRODUCT_ITEM: '.yohtmlc-item',
       PRODUCT_TITLE: '.yohtmlc-product-title',
       PRODUCT_PRICE: 'span.a-price span.a-offscreen',
@@ -149,33 +156,49 @@
     let orderId = '';
 
     try {
-      const orderInfoValues = card.querySelectorAll(DOMSelectors.ORDER_INFO_VALUES);
+      // 方法1: 新しいDOM構造（2025年1月時点）
+      // 日付・合計・注文IDはa-column.a-span2内にある
+      const columns = card.querySelectorAll('.a-column.a-span2');
+      columns.forEach(col => {
+        const text = safeGetText(col);
+        if (!text) return;
 
-      // ケース1: 標準的なDOM構造（3つの値が順番に並ぶ）
-      if (orderInfoValues.length >= 3) {
-        orderDate = parseJapaneseDate(safeGetText(orderInfoValues[0]));
-        orderTotal = parsePrice(safeGetText(orderInfoValues[1]));
-        orderId = safeGetText(orderInfoValues[2]);
-      }
-      // ケース2: DOM構造が異なる場合、パターンマッチで判別
-      else if (orderInfoValues.length >= 1) {
-        orderInfoValues.forEach(val => {
-          const text = safeGetText(val);
-          if (!text) return;
+        // 日付パターン
+        if (Patterns.JAPANESE_DATE.test(text)) {
+          orderDate = parseJapaneseDate(text);
+        }
+        // 価格パターン
+        else if (Patterns.PRICE.test(text) || text.includes('¥')) {
+          orderTotal = parsePrice(text);
+        }
+        // 注文IDパターン
+        else if (Patterns.ORDER_ID.test(text)) {
+          orderId = text;
+        }
+      });
 
-          // 日付パターン
-          if (Patterns.JAPANESE_DATE.test(text)) {
-            orderDate = parseJapaneseDate(text);
-          }
-          // 価格パターン
-          else if (Patterns.PRICE.test(text)) {
-            orderTotal = parsePrice(text);
-          }
-          // 注文IDパターン
-          else if (Patterns.ORDER_ID.test(text)) {
-            orderId = text;
-          }
-        });
+      // 方法2: 旧DOM構造へのフォールバック
+      if (!orderDate && !orderId) {
+        const orderInfoValues = card.querySelectorAll(DOMSelectors.ORDER_INFO_VALUES);
+
+        if (orderInfoValues.length >= 3) {
+          orderDate = parseJapaneseDate(safeGetText(orderInfoValues[0]));
+          orderTotal = parsePrice(safeGetText(orderInfoValues[1]));
+          orderId = safeGetText(orderInfoValues[2]);
+        } else if (orderInfoValues.length >= 1) {
+          orderInfoValues.forEach(val => {
+            const text = safeGetText(val);
+            if (!text) return;
+
+            if (Patterns.JAPANESE_DATE.test(text)) {
+              orderDate = parseJapaneseDate(text);
+            } else if (Patterns.PRICE.test(text)) {
+              orderTotal = parsePrice(text);
+            } else if (Patterns.ORDER_ID.test(text)) {
+              orderId = text;
+            }
+          });
+        }
       }
 
       // フォールバック: リンクから注文IDを取得
@@ -311,12 +334,33 @@
         );
       }
 
-      // 注文カードを取得
-      const orderCards = document.querySelectorAll(DOMSelectors.ORDER_CARD);
+      // 注文カードを取得（複数のセレクタを試行）
+      let orderCards = document.querySelectorAll(DOMSelectors.ORDER_CARD);
+
+      // フォールバック1: #orderCard
+      if (orderCards.length === 0 && DOMSelectors.ORDER_CARD_ALT) {
+        orderCards = document.querySelectorAll(DOMSelectors.ORDER_CARD_ALT);
+        if (orderCards.length > 0) {
+          console.log('[Amazon Order Exporter] Using fallback selector: ORDER_CARD_ALT');
+        }
+      }
+
+      // フォールバック2: .order-card（旧構造）
+      if (orderCards.length === 0 && DOMSelectors.ORDER_CARD_FALLBACK) {
+        orderCards = document.querySelectorAll(DOMSelectors.ORDER_CARD_FALLBACK);
+        if (orderCards.length > 0) {
+          console.log('[Amazon Order Exporter] Using fallback selector: ORDER_CARD_FALLBACK');
+        }
+      }
 
       // 注文がない場合（DOM構造が変わった可能性も考慮）
       if (orderCards.length === 0) {
         console.warn('[Amazon Order Exporter] 注文カードが見つかりません。DOM構造が変更された可能性があります。');
+        console.log('[Amazon Order Exporter] Debug: Tried selectors:',
+          DOMSelectors.ORDER_CARD,
+          DOMSelectors.ORDER_CARD_ALT,
+          DOMSelectors.ORDER_CARD_FALLBACK
+        );
       }
 
       const allOrders = [];

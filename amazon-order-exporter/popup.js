@@ -389,7 +389,10 @@
     }
 
     const SELECTORS = {
-      ORDER_CARD: '.order-card',
+      // 注文カード（2025年1月時点のDOM構造）
+      ORDER_CARD: '.a-box-group.a-spacing-top-base',
+      ORDER_CARD_ALT: '#orderCard',
+      ORDER_CARD_FALLBACK: '.order-card',
       ORDER_INFO_VALUES: '.order-info span.a-color-secondary.value',
       PRODUCT_ITEM: '.yohtmlc-item',
       PRODUCT_TITLE: '.yohtmlc-product-title',
@@ -423,32 +426,57 @@
         };
       }
 
-      const orderCards = document.querySelectorAll(SELECTORS.ORDER_CARD);
+      // 複数のセレクタを試行
+      let orderCards = document.querySelectorAll(SELECTORS.ORDER_CARD);
+      if (orderCards.length === 0) {
+        orderCards = document.querySelectorAll(SELECTORS.ORDER_CARD_ALT);
+      }
+      if (orderCards.length === 0) {
+        orderCards = document.querySelectorAll(SELECTORS.ORDER_CARD_FALLBACK);
+      }
+
       const allOrders = [];
 
       orderCards.forEach(card => {
         try {
-          const orderInfoValues = card.querySelectorAll(SELECTORS.ORDER_INFO_VALUES);
           let orderDate = '';
           let orderTotal = 0;
           let orderId = '';
 
-          if (orderInfoValues.length >= 3) {
-            orderDate = parseJapaneseDate(safeGetText(orderInfoValues[0]));
-            orderTotal = parsePrice(safeGetText(orderInfoValues[1]));
-            orderId = safeGetText(orderInfoValues[2]);
-          } else {
-            orderInfoValues.forEach(val => {
-              const text = safeGetText(val);
-              if (!text) return;
-              if (PATTERNS.JAPANESE_DATE.test(text)) {
-                orderDate = parseJapaneseDate(text);
-              } else if (PATTERNS.PRICE.test(text)) {
-                orderTotal = parsePrice(text);
-              } else if (PATTERNS.ORDER_ID.test(text)) {
-                orderId = text;
-              }
-            });
+          // 方法1: 新しいDOM構造（2025年1月時点）
+          const columns = card.querySelectorAll('.a-column.a-span2');
+          columns.forEach(col => {
+            const text = safeGetText(col);
+            if (!text) return;
+            if (PATTERNS.JAPANESE_DATE.test(text)) {
+              orderDate = parseJapaneseDate(text);
+            } else if (PATTERNS.PRICE.test(text) || text.includes('¥')) {
+              orderTotal = parsePrice(text);
+            } else if (PATTERNS.ORDER_ID.test(text)) {
+              orderId = text;
+            }
+          });
+
+          // 方法2: 旧DOM構造へのフォールバック
+          if (!orderDate && !orderId) {
+            const orderInfoValues = card.querySelectorAll(SELECTORS.ORDER_INFO_VALUES);
+            if (orderInfoValues.length >= 3) {
+              orderDate = parseJapaneseDate(safeGetText(orderInfoValues[0]));
+              orderTotal = parsePrice(safeGetText(orderInfoValues[1]));
+              orderId = safeGetText(orderInfoValues[2]);
+            } else {
+              orderInfoValues.forEach(val => {
+                const text = safeGetText(val);
+                if (!text) return;
+                if (PATTERNS.JAPANESE_DATE.test(text)) {
+                  orderDate = parseJapaneseDate(text);
+                } else if (PATTERNS.PRICE.test(text)) {
+                  orderTotal = parsePrice(text);
+                } else if (PATTERNS.ORDER_ID.test(text)) {
+                  orderId = text;
+                }
+              });
+            }
           }
 
           if (!orderId) {
