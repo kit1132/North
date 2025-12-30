@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Amazon Order Exporter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Export Amazon.co.jp order history to CSV for Claude analysis",
   "permissions": ["storage", "activeTab", "scripting", "clipboardWrite"],
   "host_permissions": ["https://www.amazon.co.jp/*"],
@@ -17,8 +17,11 @@
     "service_worker": "background.js"
   },
   "content_scripts": [{
-    "matches": ["https://www.amazon.co.jp/gp/your-account/order-history*"],
-    "js": ["content.js"],
+    "matches": [
+      "https://www.amazon.co.jp/gp/your-account/order-history*",
+      "https://www.amazon.co.jp/gp/css/order-history*"
+    ],
+    "js": ["utils.js", "content.js"],
     "run_at": "document_idle"
   }]
 }
