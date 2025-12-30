@@ -1,9 +1,6 @@
 /**
  * Amazon Order Exporter - Popup Script
  * 拡張機能ポップアップのメインロジック
- *
- * @fileoverview このスクリプトはポップアップUIの操作を担当し、
- * ユーザーインタラクション、データ取得、CSV生成を行います。
  */
 
 (function() {
@@ -13,54 +10,27 @@
   // 定数定義
   // ============================================================================
 
-  /**
-   * 設定値
-   * @readonly
-   */
   const Config = Object.freeze({
-    // 年選択の範囲
     YEAR_RANGE: 5,
-
-    // Amazon URL
     ORDER_HISTORY_BASE_URL: 'https://www.amazon.co.jp/gp/your-account/order-history',
-
-    // タイムアウト設定（ミリ秒）
     PAGE_LOAD_TIMEOUT: 30000,
     PAGE_NAVIGATION_DELAY_MIN: 2000,
     PAGE_NAVIGATION_DELAY_MAX: 4000,
-
-    // UI更新の遅延
     COPY_BUTTON_RESET_DELAY: 2000
   });
 
-  /**
-   * エラータイプ
-   * @readonly
-   */
   const ErrorTypes = Object.freeze({
     LOGIN_REQUIRED: 'LOGIN_REQUIRED',
     EXTRACTION_ERROR: 'EXTRACTION_ERROR',
-    NETWORK_ERROR: 'NETWORK_ERROR',
-    CLIPBOARD_ERROR: 'CLIPBOARD_ERROR',
-    VALIDATION_ERROR: 'VALIDATION_ERROR'
+    CLIPBOARD_ERROR: 'CLIPBOARD_ERROR'
   });
 
-  /**
-   * エラーメッセージ
-   * @readonly
-   */
   const ErrorMessages = Object.freeze({
     [ErrorTypes.LOGIN_REQUIRED]: 'ログインが必要です。Amazonにログインしてから再度お試しください。',
     [ErrorTypes.EXTRACTION_ERROR]: '注文データの抽出に失敗しました。',
-    [ErrorTypes.NETWORK_ERROR]: 'ネットワークエラーが発生しました。',
-    [ErrorTypes.CLIPBOARD_ERROR]: 'クリップボードへのコピーに失敗しました。',
-    [ErrorTypes.VALIDATION_ERROR]: '入力データが不正です。'
+    [ErrorTypes.CLIPBOARD_ERROR]: 'クリップボードへのコピーに失敗しました。'
   });
 
-  /**
-   * ステータスタイプ
-   * @readonly
-   */
   const StatusTypes = Object.freeze({
     SUCCESS: 'success',
     ERROR: 'error',
@@ -72,12 +42,10 @@
   // DOM要素参照
   // ============================================================================
 
-  /**
-   * DOM要素の参照を保持するオブジェクト
-   * @type {Object.<string, HTMLElement|null>}
-   */
   const Elements = {
     yearSelect: null,
+    monthSelect: null,
+    monthGroup: null,
     exportBtn: null,
     copyBtn: null,
     progressContainer: null,
@@ -93,74 +61,37 @@
   // アプリケーション状態
   // ============================================================================
 
-  /**
-   * アプリケーションの状態を管理
-   * @type {Object}
-   */
   const State = {
-    /** @type {Array} 抽出された注文データ */
     orders: [],
-
-    /** @type {string} 生成されたCSVコンテンツ */
     csvContent: '',
-
-    /** @type {boolean} エクスポート処理中フラグ */
     isExporting: false,
-
-    /** @type {number|null} 選択された年 */
-    selectedYear: null
+    selectedYear: null,
+    selectedMonth: null,  // null = 年全体, 1-12 = 特定月
+    periodType: 'year'    // 'year' または 'month'
   };
 
   // ============================================================================
   // ユーティリティ関数
   // ============================================================================
 
-  /**
-   * 安全にDOM要素を取得
-   *
-   * @param {string} id - 要素のID
-   * @returns {HTMLElement|null} DOM要素またはnull
-   */
   function safeGetElement(id) {
     try {
       return document.getElementById(id);
     } catch (error) {
-      console.error(`[Amazon Order Exporter] Failed to get element: ${id}`, error);
       return null;
     }
   }
 
-  /**
-   * 遅延を生成
-   *
-   * @param {number} ms - 遅延時間（ミリ秒）
-   * @returns {Promise<void>}
-   */
   function delay(ms) {
-    if (typeof ms !== 'number' || ms < 0) {
-      ms = 0;
-    }
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, Math.max(0, ms)));
   }
 
-  /**
-   * 年の値を検証
-   *
-   * @param {number|string} year - 検証する年
-   * @returns {boolean} 有効な場合true
-   */
   function isValidYear(year) {
     const numYear = parseInt(year, 10);
     const currentYear = new Date().getFullYear();
     return !Number.isNaN(numYear) && numYear >= 2000 && numYear <= currentYear;
   }
 
-  /**
-   * CSV用に文字列をエスケープ
-   *
-   * @param {string|null|undefined} str - エスケープする文字列
-   * @returns {string} エスケープされた文字列
-   */
   function escapeCSV(str) {
     if (str == null) return '';
     const strValue = String(str);
@@ -171,68 +102,58 @@
     return strValue;
   }
 
-  /**
-   * 価格を日本語フォーマットで表示
-   *
-   * @param {number} amount - 金額
-   * @returns {string} フォーマットされた金額
-   */
   function formatPrice(amount) {
-    if (typeof amount !== 'number' || Number.isNaN(amount)) {
-      return '0';
-    }
+    if (typeof amount !== 'number' || Number.isNaN(amount)) return '0';
     return Math.max(0, Math.floor(amount)).toLocaleString('ja-JP');
+  }
+
+  /**
+   * 注文データを月でフィルタリング
+   * @param {Array} orders - 注文データ
+   * @param {number} year - 年
+   * @param {number} month - 月 (1-12)
+   * @returns {Array} フィルタされた注文データ
+   */
+  function filterOrdersByMonth(orders, year, month) {
+    if (!Array.isArray(orders) || !month) return orders;
+
+    const targetPrefix = `${year}-${String(month).padStart(2, '0')}`;
+
+    return orders.filter(order => {
+      if (!order.date || typeof order.date !== 'string') return false;
+      return order.date.startsWith(targetPrefix);
+    });
   }
 
   // ============================================================================
   // DOM要素初期化
   // ============================================================================
 
-  /**
-   * DOM要素の参照を初期化
-   *
-   * @returns {boolean} 全要素が取得できた場合true
-   */
   function initializeElements() {
     const elementIds = [
-      'yearSelect',
-      'exportBtn',
-      'copyBtn',
-      'progressContainer',
-      'progressFill',
-      'progressText',
-      'resultContainer',
-      'orderCount',
-      'totalSpent',
+      'yearSelect', 'monthSelect', 'monthGroup',
+      'exportBtn', 'copyBtn',
+      'progressContainer', 'progressFill', 'progressText',
+      'resultContainer', 'orderCount', 'totalSpent',
       'statusMessage'
     ];
 
-    let allFound = true;
-
     elementIds.forEach(id => {
       Elements[id] = safeGetElement(id);
-      if (!Elements[id]) {
-        console.error(`[Amazon Order Exporter] Required element not found: ${id}`);
-        allFound = false;
-      }
     });
 
-    return allFound;
+    // 必須要素のチェック
+    return Elements.yearSelect && Elements.exportBtn;
   }
 
   // ============================================================================
   // UI操作関数
   // ============================================================================
 
-  /**
-   * 年選択ドロップダウンを初期化
-   */
   function populateYearSelect() {
     if (!Elements.yearSelect) return;
 
     const currentYear = new Date().getFullYear();
-
-    // 既存のオプションをクリア
     Elements.yearSelect.innerHTML = '';
 
     for (let i = 0; i < Config.YEAR_RANGE; i++) {
@@ -243,88 +164,64 @@
       Elements.yearSelect.appendChild(option);
     }
 
-    // 初期値を設定
     State.selectedYear = currentYear;
   }
 
-  /**
-   * エクスポートボタンのローディング状態を設定
-   *
-   * @param {boolean} loading - ローディング中の場合true
-   */
-  function setExportLoading(loading) {
-    State.isExporting = loading;
-
-    if (!Elements.exportBtn) return;
-
-    Elements.exportBtn.disabled = loading;
-
-    const btnText = Elements.exportBtn.querySelector('.btn-text');
-    const btnLoading = Elements.exportBtn.querySelector('.btn-loading');
-
-    if (btnText) {
-      btnText.style.display = loading ? 'none' : 'inline';
-    }
-    if (btnLoading) {
-      btnLoading.style.display = loading ? 'inline' : 'none';
+  function setCurrentMonth() {
+    // 現在の月をデフォルトで選択
+    if (Elements.monthSelect) {
+      const currentMonth = new Date().getMonth() + 1;
+      Elements.monthSelect.value = String(currentMonth);
+      State.selectedMonth = currentMonth;
     }
   }
 
-  /**
-   * 進捗表示を表示
-   */
+  function toggleMonthSelect(show) {
+    if (Elements.monthGroup) {
+      Elements.monthGroup.style.display = show ? 'block' : 'none';
+    }
+  }
+
+  function setExportLoading(loading) {
+    State.isExporting = loading;
+    if (!Elements.exportBtn) return;
+
+    Elements.exportBtn.disabled = loading;
+    const btnText = Elements.exportBtn.querySelector('.btn-text');
+    const btnLoading = Elements.exportBtn.querySelector('.btn-loading');
+
+    if (btnText) btnText.style.display = loading ? 'none' : 'inline';
+    if (btnLoading) btnLoading.style.display = loading ? 'inline' : 'none';
+  }
+
   function showProgress() {
     if (!Elements.progressContainer || !Elements.progressFill) return;
-
     Elements.progressContainer.style.display = 'block';
     Elements.progressContainer.classList.add('fade-in');
     Elements.progressFill.classList.add('indeterminate');
   }
 
-  /**
-   * 進捗表示を非表示
-   */
   function hideProgress() {
     if (!Elements.progressContainer || !Elements.progressFill) return;
-
     Elements.progressContainer.style.display = 'none';
     Elements.progressFill.classList.remove('indeterminate');
   }
 
-  /**
-   * 進捗情報を更新
-   *
-   * @param {Object} data - 進捗データ
-   * @param {string} [data.status] - ステータスメッセージ
-   * @param {number} [data.ordersCount] - 取得済み注文数
-   */
   function updateProgress(data) {
     if (!Elements.progressText) return;
-
     let message = data.status || '取得中...';
-
     if (typeof data.ordersCount === 'number' && data.ordersCount >= 0) {
       message = `${data.status || '取得中...'} (${data.ordersCount}件取得済み)`;
     }
-
     Elements.progressText.textContent = message;
   }
 
-  /**
-   * 結果を表示
-   *
-   * @param {Array} orders - 注文データ配列
-   */
   function showResult(orders) {
     if (!Elements.resultContainer || !Elements.orderCount ||
         !Elements.totalSpent || !Elements.copyBtn) return;
 
-    if (!Array.isArray(orders)) {
-      console.error('[Amazon Order Exporter] Invalid orders data');
-      return;
-    }
+    if (!Array.isArray(orders)) return;
 
-    // 合計金額を計算（価格 × 数量）
     const total = orders.reduce((sum, order) => {
       const price = typeof order.price === 'number' ? order.price : 0;
       const quantity = typeof order.quantity === 'number' ? order.quantity : 1;
@@ -338,62 +235,36 @@
     Elements.copyBtn.disabled = false;
   }
 
-  /**
-   * 結果を非表示
-   */
   function hideResult() {
-    if (!Elements.resultContainer) return;
-    Elements.resultContainer.style.display = 'none';
+    if (Elements.resultContainer) Elements.resultContainer.style.display = 'none';
   }
 
-  /**
-   * ステータスメッセージを表示
-   *
-   * @param {string} type - ステータスタイプ（success, error, warning, info）
-   * @param {string} message - 表示するメッセージ
-   */
   function showStatus(type, message) {
     if (!Elements.statusMessage) return;
-
-    // バリデーション
     const validTypes = Object.values(StatusTypes);
     const statusType = validTypes.includes(type) ? type : StatusTypes.INFO;
-
     Elements.statusMessage.textContent = message;
     Elements.statusMessage.className = `status-message ${statusType} fade-in`;
     Elements.statusMessage.style.display = 'block';
   }
 
-  /**
-   * ステータスメッセージを非表示
-   */
   function hideStatus() {
-    if (!Elements.statusMessage) return;
-    Elements.statusMessage.style.display = 'none';
+    if (Elements.statusMessage) Elements.statusMessage.style.display = 'none';
   }
 
   // ============================================================================
   // タブ操作
   // ============================================================================
 
-  /**
-   * 現在のタブ情報を取得
-   *
-   * @returns {Promise<chrome.tabs.Tab|null>} タブ情報またはnull
-   */
   async function getCurrentTab() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       return tab || null;
     } catch (error) {
-      console.error('[Amazon Order Exporter] Failed to get current tab:', error);
       return null;
     }
   }
 
-  /**
-   * 現在のタブがAmazonかどうかをチェック
-   */
   async function checkCurrentTab() {
     try {
       const tab = await getCurrentTab();
@@ -404,31 +275,23 @@
         return;
       }
 
-      // Amazon.co.jpかチェック
       if (!tab.url.includes('amazon.co.jp')) {
         showStatus(StatusTypes.WARNING, 'Amazon.co.jpのページで実行してください。');
         if (Elements.exportBtn) Elements.exportBtn.disabled = true;
         return;
       }
 
-      // 注文履歴ページかチェック
       const isOrderPage = tab.url.includes('/gp/your-account/order-history') ||
                           tab.url.includes('/gp/css/order-history');
 
       if (!isOrderPage) {
-        showStatus(StatusTypes.INFO, '注文履歴ページに移動してからエクスポートを開始してください。');
+        showStatus(StatusTypes.INFO, '「エクスポート開始」をクリックすると注文履歴ページに移動します。');
       }
     } catch (error) {
       console.error('[Amazon Order Exporter] Tab check error:', error);
     }
   }
 
-  /**
-   * タブの読み込み完了を待機
-   *
-   * @param {number} tabId - タブID
-   * @returns {Promise<void>}
-   */
   function waitForTabLoad(tabId) {
     return new Promise((resolve) => {
       let resolved = false;
@@ -438,7 +301,6 @@
           if (!resolved) {
             resolved = true;
             chrome.tabs.onUpdated.removeListener(listener);
-            // JavaScriptの実行を待つ追加遅延
             setTimeout(resolve, 2000);
           }
         }
@@ -446,7 +308,6 @@
 
       chrome.tabs.onUpdated.addListener(listener);
 
-      // タイムアウト
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
@@ -461,14 +322,7 @@
   // データ抽出
   // ============================================================================
 
-  /**
-   * コンテンツスクリプトを実行して注文を抽出
-   *
-   * @param {number} tabId - タブID
-   * @returns {Promise<Object>} 抽出結果
-   */
   async function executeContentScript(tabId) {
-    // まず既存のコンテンツスクリプトにメッセージを送信
     try {
       const response = await new Promise((resolve, reject) => {
         chrome.tabs.sendMessage(tabId, { action: 'extractOrders' }, (response) => {
@@ -481,9 +335,7 @@
       });
       return response;
     } catch (error) {
-      // コンテンツスクリプトがロードされていない場合、直接注入して実行
-      console.log('[Amazon Order Exporter] Content script not loaded, injecting...');
-
+      // コンテンツスクリプトがない場合は直接注入
       try {
         const results = await chrome.scripting.executeScript({
           target: { tabId },
@@ -493,21 +345,14 @@
         if (results && results[0] && results[0].result) {
           return results[0].result;
         }
-
         throw new Error('スクリプト実行結果が取得できませんでした');
       } catch (scriptError) {
-        console.error('[Amazon Order Exporter] Script injection failed:', scriptError);
         throw scriptError;
       }
     }
   }
 
-  /**
-   * ページに注入される抽出関数
-   * background.jsと同じロジックを含む
-   */
   function extractOrdersFunction() {
-    // ヘルパー関数
     function parseJapaneseDate(dateStr) {
       if (!dateStr || typeof dateStr !== 'string') return '';
       const pattern = /(\d{4})年(\d{1,2})月(\d{1,2})日/;
@@ -543,7 +388,6 @@
       return null;
     }
 
-    // セレクタ
     const SELECTORS = {
       ORDER_CARD: '.order-card',
       ORDER_INFO_VALUES: '.order-info span.a-color-secondary.value',
@@ -566,7 +410,6 @@
     };
 
     try {
-      // ログインチェック
       const url = window.location.href;
       const isLoginRequired = url.includes('/ap/signin') ||
                               url.includes('/ap/login') ||
@@ -580,13 +423,11 @@
         };
       }
 
-      // 注文カードを取得
       const orderCards = document.querySelectorAll(SELECTORS.ORDER_CARD);
       const allOrders = [];
 
       orderCards.forEach(card => {
         try {
-          // メタ情報を抽出
           const orderInfoValues = card.querySelectorAll(SELECTORS.ORDER_INFO_VALUES);
           let orderDate = '';
           let orderTotal = 0;
@@ -610,7 +451,6 @@
             });
           }
 
-          // フォールバック: リンクから注文IDを取得
           if (!orderId) {
             const link = card.querySelector(SELECTORS.ORDER_DETAILS_LINK);
             if (link && link.href) {
@@ -619,7 +459,6 @@
             }
           }
 
-          // 商品情報を抽出
           const items = card.querySelectorAll(SELECTORS.PRODUCT_ITEM);
           items.forEach(item => {
             const titleEl = item.querySelector(SELECTORS.PRODUCT_TITLE);
@@ -655,7 +494,6 @@
         }
       });
 
-      // ページネーションをチェック
       const pagination = document.querySelector(SELECTORS.PAGINATION);
       const nextPageLink = pagination ? pagination.querySelector(SELECTORS.NEXT_PAGE) : null;
       const hasNextPage = nextPageLink !== null;
@@ -675,13 +513,6 @@
     }
   }
 
-  /**
-   * 指定年の全ページから注文を抽出
-   *
-   * @param {number} tabId - タブID
-   * @param {number} year - 年
-   * @returns {Promise<Array>} 全注文データ
-   */
   async function extractOrdersFromAllPages(tabId, year) {
     const allOrders = [];
     let startIndex = 0;
@@ -694,10 +525,8 @@
         ordersCount: allOrders.length
       });
 
-      // 現在のページから注文を抽出
       const result = await executeContentScript(tabId);
 
-      // エラーチェック
       if (!result || !result.success) {
         if (result && result.error === ErrorTypes.LOGIN_REQUIRED) {
           throw new Error(ErrorTypes.LOGIN_REQUIRED);
@@ -705,14 +534,12 @@
         throw new Error(result?.message || '注文データの抽出に失敗しました');
       }
 
-      // 注文を追加
       if (Array.isArray(result.orders)) {
         allOrders.push(...result.orders);
       }
 
       hasMore = result.hasNextPage === true;
 
-      // 次のページへ移動
       if (hasMore) {
         startIndex += 10;
         pageNum++;
@@ -721,7 +548,6 @@
         await chrome.tabs.update(tabId, { url: nextUrl });
         await waitForTabLoad(tabId);
 
-        // レート制限対策の遅延
         const delayTime = Config.PAGE_NAVIGATION_DELAY_MIN +
           Math.random() * (Config.PAGE_NAVIGATION_DELAY_MAX - Config.PAGE_NAVIGATION_DELAY_MIN);
         await delay(delayTime);
@@ -735,49 +561,37 @@
   // CSV生成
   // ============================================================================
 
-  /**
-   * 注文データからCSVを生成
-   *
-   * @param {Array} orders - 注文データ配列
-   * @param {number} year - 年
-   * @returns {string} CSV形式の文字列
-   */
-  function generateCSV(orders, year) {
-    if (!Array.isArray(orders)) {
-      console.error('[Amazon Order Exporter] Invalid orders data for CSV generation');
-      return '';
-    }
+  function generateCSV(orders, year, month = null) {
+    if (!Array.isArray(orders)) return '';
 
-    // 合計金額を計算
     const totalSpentAmount = orders.reduce((sum, order) => {
       const price = typeof order.price === 'number' ? order.price : 0;
       const quantity = typeof order.quantity === 'number' ? order.quantity : 1;
       return sum + (price * quantity);
     }, 0);
 
-    // 現在日時
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-    // 日付範囲を取得
-    const dates = orders
-      .map(o => o.date)
-      .filter(d => typeof d === 'string' && d.length > 0)
-      .sort();
+    // 期間表示
+    let periodStr;
+    if (month) {
+      periodStr = `${year}年${month}月`;
+    } else {
+      const dates = orders.map(o => o.date).filter(d => typeof d === 'string' && d.length > 0).sort();
+      const startDate = dates.length > 0 ? dates[0] : `${year}-01-01`;
+      const endDate = dates.length > 0 ? dates[dates.length - 1] : `${year}-12-31`;
+      periodStr = `${startDate} 〜 ${endDate}`;
+    }
 
-    const startDate = dates.length > 0 ? dates[dates.length - 1] : `${year}-01-01`;
-    const endDate = dates.length > 0 ? dates[0] : `${year}-12-31`;
-
-    // ヘッダーコメント
     const header = [
       `# Amazon注文履歴エクスポート`,
-      `# 期間: ${startDate} 〜 ${endDate}`,
+      `# 期間: ${periodStr}`,
       `# 総注文数: ${orders.length}件 | 総支出: ¥${totalSpentAmount.toLocaleString('ja-JP')}`,
       `# エクスポート日時: ${now}`,
       ``,
       `order_id,date,time,item,quantity,price`
     ].join('\n');
 
-    // データ行
     const rows = orders.map(order => {
       const orderId = escapeCSV(order.orderId);
       const date = escapeCSV(order.date);
@@ -785,7 +599,6 @@
       const item = escapeCSV(order.item);
       const quantity = typeof order.quantity === 'number' ? order.quantity : 1;
       const price = typeof order.price === 'number' ? order.price : 0;
-
       return `${orderId},${date},${time},${item},${quantity},${price}`;
     }).join('\n');
 
@@ -796,19 +609,10 @@
   // イベントハンドラ
   // ============================================================================
 
-  /**
-   * エクスポートボタンのクリックハンドラ
-   */
   async function handleExport() {
-    // 多重実行防止
-    if (State.isExporting) {
-      console.log('[Amazon Order Exporter] Export already in progress');
-      return;
-    }
+    if (State.isExporting) return;
 
-    // 年を取得・検証
     const year = Elements.yearSelect ? Elements.yearSelect.value : null;
-
     if (!isValidYear(year)) {
       showStatus(StatusTypes.ERROR, '有効な年を選択してください。');
       return;
@@ -816,42 +620,52 @@
 
     State.selectedYear = parseInt(year, 10);
 
+    // 月を取得（月単位モードの場合のみ）
+    if (State.periodType === 'month' && Elements.monthSelect) {
+      State.selectedMonth = parseInt(Elements.monthSelect.value, 10);
+    } else {
+      State.selectedMonth = null;
+    }
+
     try {
       setExportLoading(true);
       hideStatus();
       hideResult();
       showProgress();
 
-      // 現在のタブを取得
       const tab = await getCurrentTab();
-
       if (!tab || !tab.id) {
         throw new Error('アクティブなタブが見つかりません');
       }
 
-      // 注文履歴ページに移動
+      // 年単位のURLで注文履歴ページに移動（Amazonには月単位のフィルタがないため）
       const orderHistoryUrl = `${Config.ORDER_HISTORY_BASE_URL}?orderFilter=year-${year}&startIndex=0`;
       await chrome.tabs.update(tab.id, { url: orderHistoryUrl });
       await waitForTabLoad(tab.id);
 
       // 全ページから注文を抽出
-      State.orders = await extractOrdersFromAllPages(tab.id, State.selectedYear);
+      let orders = await extractOrdersFromAllPages(tab.id, State.selectedYear);
 
-      // CSVを生成
-      State.csvContent = generateCSV(State.orders, State.selectedYear);
+      // 月単位の場合はクライアント側でフィルタリング
+      if (State.selectedMonth) {
+        updateProgress({ status: `${State.selectedMonth}月のデータを抽出中...` });
+        orders = filterOrdersByMonth(orders, State.selectedYear, State.selectedMonth);
+      }
 
-      // 結果を表示
+      State.orders = orders;
+      State.csvContent = generateCSV(State.orders, State.selectedYear, State.selectedMonth);
+
       showResult(State.orders);
-      showStatus(StatusTypes.SUCCESS, 'エクスポートが完了しました！');
 
-      console.log(`[Amazon Order Exporter] Export complete: ${State.orders.length} items`);
+      const periodMsg = State.selectedMonth
+        ? `${State.selectedYear}年${State.selectedMonth}月`
+        : `${State.selectedYear}年`;
+      showStatus(StatusTypes.SUCCESS, `${periodMsg}のエクスポートが完了しました！`);
 
     } catch (error) {
       console.error('[Amazon Order Exporter] Export error:', error);
 
-      // エラータイプに応じたメッセージ
       let errorMessage = ErrorMessages[ErrorTypes.EXTRACTION_ERROR];
-
       if (error.message === ErrorTypes.LOGIN_REQUIRED) {
         errorMessage = ErrorMessages[ErrorTypes.LOGIN_REQUIRED];
       } else if (error.message) {
@@ -866,11 +680,7 @@
     }
   }
 
-  /**
-   * コピーボタンのクリックハンドラ
-   */
   async function handleCopy() {
-    // CSVコンテンツがあるかチェック
     if (!State.csvContent) {
       showStatus(StatusTypes.ERROR, 'コピーするデータがありません。');
       return;
@@ -878,34 +688,33 @@
 
     try {
       await navigator.clipboard.writeText(State.csvContent);
-
       showStatus(StatusTypes.SUCCESS, 'クリップボードにコピーしました！');
 
-      // ボタンテキストを一時的に変更
       if (Elements.copyBtn) {
         const originalText = Elements.copyBtn.textContent;
         Elements.copyBtn.textContent = 'コピー完了！';
-
         setTimeout(() => {
           if (Elements.copyBtn) {
             Elements.copyBtn.textContent = originalText || 'クリップボードにコピー';
           }
         }, Config.COPY_BUTTON_RESET_DELAY);
       }
-
-      console.log('[Amazon Order Exporter] CSV copied to clipboard');
-
     } catch (error) {
-      console.error('[Amazon Order Exporter] Copy error:', error);
       showStatus(StatusTypes.ERROR, ErrorMessages[ErrorTypes.CLIPBOARD_ERROR]);
     }
   }
 
-  /**
-   * 進捗更新メッセージのハンドラ
-   *
-   * @param {Object} message - メッセージデータ
-   */
+  function handlePeriodTypeChange(event) {
+    const selectedType = event.target.value;
+    State.periodType = selectedType;
+
+    if (selectedType === 'month') {
+      toggleMonthSelect(true);
+    } else {
+      toggleMonthSelect(false);
+    }
+  }
+
   function handleProgressUpdate(message) {
     if (message && message.action === 'progressUpdate') {
       updateProgress({
@@ -919,21 +728,21 @@
   // イベントリスナー設定
   // ============================================================================
 
-  /**
-   * イベントリスナーを設定
-   */
   function setupEventListeners() {
-    // エクスポートボタン
     if (Elements.exportBtn) {
       Elements.exportBtn.addEventListener('click', handleExport);
     }
 
-    // コピーボタン
     if (Elements.copyBtn) {
       Elements.copyBtn.addEventListener('click', handleCopy);
     }
 
-    // バックグラウンドからの進捗更新
+    // 期間タイプのラジオボタン
+    const periodRadios = document.querySelectorAll('input[name="periodType"]');
+    periodRadios.forEach(radio => {
+      radio.addEventListener('change', handlePeriodTypeChange);
+    });
+
     if (chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener(handleProgressUpdate);
     }
@@ -943,31 +752,22 @@
   // 初期化
   // ============================================================================
 
-  /**
-   * アプリケーションを初期化
-   */
   function initialize() {
     console.log('[Amazon Order Exporter] Popup initializing...');
 
-    // DOM要素を取得
     if (!initializeElements()) {
       console.error('[Amazon Order Exporter] Failed to initialize elements');
       return;
     }
 
-    // 年選択を設定
     populateYearSelect();
-
-    // イベントリスナーを設定
+    setCurrentMonth();
     setupEventListeners();
-
-    // 現在のタブをチェック
     checkCurrentTab();
 
     console.log('[Amazon Order Exporter] Popup initialized');
   }
 
-  // DOMContentLoadedで初期化
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initialize);
   } else {
